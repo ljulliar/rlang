@@ -6,6 +6,8 @@ Rlang is not a new language and it is not intended to be a general purpose langu
 
 Rlang can be seen as a foundational language that can help you quickly develop and debug high performance WebAssembly modules. For the rationale behind the creation of Rlang see below.
 
+What you'll find in the current version is a first implementation of Rlang. It will improve over time, with more facilities and probably more Ruby features but always with the goal to generate crisp and uncluttered WAT code.
+
 ## Supported subset of Ruby
 TBD
 supported instructions
