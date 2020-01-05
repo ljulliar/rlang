@@ -701,7 +701,7 @@ module Rlang::Parser
         when /^rlang/
           # If it starts with rlang then look for it in the 
           # installed rlang gem in addition to load path
-          load_path = self.config[:LOAD_PATH] + Gem.default_path
+          load_path = self.config[:LOAD_PATH] + $LOAD_PATH
         else
           load_path = self.config[:LOAD_PATH]
           load_path = [Dir.pwd] if self.config[:LOAD_PATH].empty?
