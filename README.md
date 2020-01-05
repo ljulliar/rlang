@@ -8,11 +8,14 @@ Rlang can be seen as a foundational language that can help you quickly develop a
 
 What you'll find in the current version is a first implementation of Rlang. It will improve over time, with more facilities and probably more Ruby features but always with the goal to generate crisp and uncluttered WAT code.
 
+## Dependencies
+
+* **wat2wasm** : the rlang compiler generates WAT code. From there you'll need a tool like *wat2wasm* to generate the WASM bytecode that you can execute in a WASM runtime of your choice (can be your browser or a non browser based runtime). wat2wasm is part of the [WABT toolkit](https://github.com/WebAssembly/wabt)
+* **wasmer**: wasmer is a fast WebAssembly runtime. You'll need it only if you want to run the test suite from the source repo. You can get it from [wasmer.io](https://wasmer.io/)
+
 ## Supported subset of Ruby
-TBD
-supported instructions
-supported types
-type cast
+Look at the test/rlang_files files for example if the subset of Ruby currently supported.
+(Coming soon: supported instructions, supported types, type cast...)
 
 ## rlang compiler
 TBD
