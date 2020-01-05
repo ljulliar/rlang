@@ -14,7 +14,7 @@ Gem::Specification.new do |spec|
    subset of the Ruby language and a compiler transforming this Ruby subset in a valid 
    and fully runnable WebAssembly module.}
   spec.homepage      = "https://github.com/ljulliar/rlang"
-  spec.license       = "MPL 2.0"
+  spec.license       = "MPL-2.0"
 
   #spec.metadata["allowed_push_host"] = "TODO: Set to 'http://mygemserver.com'"
 
@@ -27,8 +27,8 @@ Gem::Specification.new do |spec|
   spec.files         = Dir.chdir(File.expand_path('..', __FILE__)) do
     `git ls-files -z`.split("\x0").reject { |f| f.match(%r{^(test|spec|features)/}) }
   end
-  spec.bindir        = "exe"
-  spec.executables   = spec.files.grep(%r{^exe/}) { |f| File.basename(f) }
+  spec.bindir        = "bin"
+  spec.executables   << "rlang"
   spec.require_paths = ["lib"]
 
   spec.add_development_dependency "bundler", "~> 2.0"
