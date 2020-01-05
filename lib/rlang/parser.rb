@@ -694,11 +694,22 @@ module Rlang::Parser
           break if File.exist?(full_path_file)
         end
       else
-        # If file starts with . load file from pwd
-        # If config[:LOAD_PATH] is empty look for current working directory
-        load_path = (file[0] == '.' ? [Dir.pwd] : self.config[:LOAD_PATH])
-        load_path = [Dir.pwd] if load_path.empty?
+        case file
+        when /^\./
+          # If file starts with . then look for file in pwd
+          load_path = [Dir.pwd]
+        when /^rlang/
+          # If it starts with rlang then look for it in the 
+          # installed rlang gem in addition to load path
+          load_path = self.config[:LOAD_PATH] + Gem.default_path
+        else
+          load_path = self.config[:LOAD_PATH]
+          load_path = [Dir.pwd] if self.config[:LOAD_PATH].empty?
+        end
         logger.debug "load_path: #{load_path} for file #{file}"
+
+        # Now try each possible extension foreach possible
+        # directory in the load path
         load_path.each do |dir|
           break unless extensions.each do |ext|
             full_path_file = File.expand_path(File.join(dir, file+ext))
@@ -709,6 +720,8 @@ module Rlang::Parser
         end
       end
       raise LoadError, "no such file to load: #{file}" unless full_path_file
+
+      # Now load the file 
       if File.extname(full_path_file) == '.wat'
         wat_code = File.read(full_path_file)
         @wgenerator.inline(wnode, wat_code)
