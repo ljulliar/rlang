@@ -26,7 +26,7 @@ $ gem install --local rlang-0.1.0.gem
 To check that the installation went well, run `rlang --help` and see if the help message displays correctly
 
 ## The Rlang language
-Ruby features supported by Rlang are detailed in the [Rlang Manual](https://github.com/ljulliar/rlang/blob/master/docs/RlangLanguage.md)
+Ruby features supported by Rlang are detailed in the [Rlang Manual](https://github.com/ljulliar/rlang/blob/master/docs/RlangManual.md)
 
 You can also look at the rlang test suite in [test/rlang_files](https://github.com/ljulliar/rlang/blob/master/test/rlang_files/) to get a flavor of the subset of Ruby currently supported.
 
