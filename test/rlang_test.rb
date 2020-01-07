@@ -32,6 +32,7 @@ class RlangTest < Minitest::Test
     test_file = File.join(TEST_FILES_DIR,"#{self.name}.rb")
     @builder = Builder::Rlang::Builder.new()
     target = Tempfile.new([self.name, '.wat'])
+    target.persist!
     assert @builder.compile(test_file, target.path, @@rlang_options[self.name.to_sym])
     # Instantiate a wasmer runtime
     bytes = File.read(@builder.target)
@@ -144,11 +145,15 @@ class RlangTest < Minitest::Test
   def test_def_one_arg
     assert_equal 50, @instance.exports.send(@wfunc, 10)
   end
+
+  def test_def_result_type_declaration
+    assert_equal 121, @instance.exports.send(@wfunc)
+  end
   
   def test_def_return_i64
     assert_equal 21, @instance.exports.send(@wfunc)
   end
- 
+
   def test_def_return_no_value_OK
     assert_nil @instance.exports.send(@wfunc)
   end
