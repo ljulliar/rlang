@@ -11,22 +11,31 @@ module Builder::Wat
 
     attr_reader :target, :source
 
-    # Source file must be an ERB template
-    def initialize(source, include_paths = nil)
+    def initialize(source, target, include_paths = nil)
+      check_compiler
       @source = source
+      @target = target
       @include_paths = include_paths || ['.', File.expand_path('../../machine', source)]
-      @wat_path = self.assemble
+      if File.extname(source) == '.erb'
+        @wat_path = self.assemble
+      else
+        @wat_path = source
+      end
+    end
+
+    def check_compiler
+      raise "wat2wasm compiler not found. Make sure it is in your PATH" \
+        unless system("#{@@wat_compiler} --help >/dev/null")
     end
 
     def compile
-      @target = @wat_path.gsub(/\.wat$/,'.wasm')
+      @target ||= @wat_path.gsub(/\.wat$/,'.wasm')
       %x{ #{@@wat_compiler} #{@wat_path} -o #{@target} }
       @target
     end
 
     def cleanup
-      File.unlink(@wat_path)
-      File.unlink(@wasm_path)
+      File.unlink(@wat_path) unless @wat_path == @source
     end
 
     # Create a tempfile with .wat extension from 
