@@ -4,7 +4,7 @@
 
 require 'test_helper'
 require 'wasmer'
-require_relative '../lib/builder/ext/tempfile'
+require_relative '../lib/builder'
 
 
 class RlangTest < Minitest::Test
@@ -28,7 +28,7 @@ class RlangTest < Minitest::Test
   def setup
     # Name of wasm test method to call
     @wfunc = "test_#{self.name}"
-    # Compile rlang test file
+    # Compile rlang test file to WASM bytecode
     test_file = File.join(TEST_FILES_DIR,"#{self.name}.rb")
     @builder = Builder::Rlang::Builder.new()
     target = Tempfile.new([self.name, '.wat'])
