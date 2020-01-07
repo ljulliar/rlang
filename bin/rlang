@@ -13,9 +13,7 @@
 
 require 'optparse'
 require 'fileutils'
-require_relative '../lib/utils/log'
-require_relative '../lib/rlang'
-require_relative '../lib/builder'
+require 'rlang'
 
 include Log
 logger.level = Logger::INFO
