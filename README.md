@@ -15,10 +15,12 @@ What you'll find in the current version is a first implementation of Rlang. It w
 
 
 ## Installing Rlang
-Rlang installation is as easy as
+Rlang is not yet published as a gem. This will come soon. In the meantime, clone the Rlang git repo and run the following command:
+
 
 ```
-$ gem install rlang
+$ gem build rlang.gemspec
+$ gem install --local rlang-0.1.0.gem
 ```
 
 To check that the installation went well, run `rlang --help` and see if the help message displays correctly
