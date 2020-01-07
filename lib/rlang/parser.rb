@@ -823,7 +823,7 @@ module Rlang::Parser
       # (:nil means no value is returned)
       # 
       # Example
-      # ret :I64
+      # result :I64
       # ---------
       # s(:send, nil, :result,
       #   s(:sym, :I64))
