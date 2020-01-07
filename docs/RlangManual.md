@@ -17,7 +17,7 @@ The above limitation on the object model might look like a serious handicap to y
 Rlang provides:
 * Classes and class variables
 * Method definition and method calls
-* Integers (both short and long or i32 and i64 to use the WebAssembly terminology) 
+* Integers (both long and double or i32 and i64 to use the WebAssembly terminology) 
 * Constants
 * Global variables
 * Control constructs (if, while, until, break, next,...)
@@ -79,18 +79,18 @@ Rlang method definition supports fixed name arguments in any number. So the foll
 By default all arguments in Rlang are considered as being type i32 (a 32 bit integer). See the Type section below for more details. If your argument is of a different type you **must** explicitely state it. 
 ```ruby
 def self.m_two_args(arg1, arg2)
-  arg :arg2, :i64
+  arg :arg2, :I64
   # your code here...
 end
 ```
-In the example above arg1 is of type i32 (the default) and arg2 being of type i64 must be explicitely declared as such.
+In the example above arg1 is of type i32 (the default type) and assuming arg2 is of type i64, it must be explicitely declared as such.
 
 ### Return result
-Unless otherwise stated, a method must always return an integer value of type i32 (the default type in Rlang). If your method doesn't return anything or a value of a different type you have to say it.
+Unless otherwise stated, a method must always return an integer value of type i32 (the default type in Rlang). If your method doesn't return anything or a value of a different type you have to say so with the `result` directive.
 
 ```ruby
 def self.m_no_return_value(arg1, arg2)
-  arg :arg2, :i64
+  arg :arg2, :I64
   result :none
   # your code here
   # ...
@@ -98,7 +98,7 @@ def self.m_no_return_value(arg1, arg2)
   return
 end
 ```
-Similarly you can use `return :i64` if your method is to return a long integer value.
+Similarly you can use `return :I64` if your method is to return a double integer value.
 
 With a few exceptions (see the Conditional and Iteration Structures sections below), each Rlang statements evaluate to a value. In the absence of a `return some_expression` statement, a method returns the value of the last evaluated statement. In the example above the method `MyClass::take_one` returns the value of `@@cvar` after decreasing it by one and `MyClass::refill` returns 100.
 
@@ -114,12 +114,12 @@ Local variable used in a method body doesn't have to be declared. They are auto-
 
 ```ruby
 def self.m_local_var(arg1)
-  local :lvar, :i64
+  local :lvar, :I64
   lvar = 10
   # ....
 end
 ```
-In this example, without the `local :lvar, :i64` directive, `lvar` would have been typed as `i32` because the assigned value (here `10`) is itself interpreted as`i32` by default. 
+In this example, without the `local :lvar, :I64` directive, `lvar` would have been typed as `i32` because the assigned value (here `10`) is itself interpreted as an `i32` value by default. 
 
 ### Exporting a method
 In WebAssembly, you can make functions visible to the outside world by declaring them in the export section. To achieve a similar result in Rlang, you can use the `export` keyword right before a method definition. 
@@ -150,7 +150,7 @@ Only in rare cases will you use the `local` directive in methods as Rlang does i
 
 ```ruby
 def self.m_local_var(arg1)
-  arg :arg1, :i64
+  arg :arg1, :I64
   lvar = arg1 * 100
   # ....
 end
@@ -160,7 +160,7 @@ Conversely in the method below the first statement `lvar = 10` auto-vivifies `lv
 
 ```ruby
 def self.m_local_var(arg1)
-  arg :arg1, :i64
+  arg :arg1, :I64
   lvar = 10 # lvar is auto-vivified as i32
   lvar = arg1 * 100
   # ....
@@ -200,10 +200,10 @@ end
 ```
 
 ## Global variables
-Rlang provides global variable as well. Whereas a constant can only be defined within the scope of a class definition, a global variable can be defined anywhere. In the example below it is defined at the top level and initiated with an `i64` value.
+Rlang provides global variable as well. Whereas a constant can only be defined within the scope of a class definition, a global variable can be defined anywhere. When defined at the top level one can only assign a literal value like 100 (or 100.to_i64) in the example. Assigning an expression can only be done within the scope of a method.
 
 ```ruby
-$MYGLOBAL = 100.to_i64
+$MYGLOBAL = 100
 
 class TestB
   CONST = 1
@@ -279,7 +279,7 @@ end
 ```
 What this code sample does is to multiply the method argument by 10 (in Ruby) and then inline some WAT code that squares this argument. The reason for the `ruby:` keyword argument is to give the equivalent Ruby code that will be used when you run your Rlang code in the Rlang simulator (still in development).
 
-A third keyword argument `wtype:` also allows to specifiy the WebAssembly type produced by the fragment of inlined WAT code. By default it is assumed to produce an `i32`. If not you can either specify `wtype: :i64` or `wtype: :none`
+A third keyword argument `wtype:` also allows to specifiy the WebAssembly type produced by the fragment of inlined WAT code. By default it is assumed to produce an `i32`. If not you can either specify `wtype: :I64` or `wtype: :none`
 
 ## The Rlang library
 Rlang comes with a library that provides a number of pre-defined classes and methods (written in Rlang of course) that you can use by adding the following statement in your Rlang files
