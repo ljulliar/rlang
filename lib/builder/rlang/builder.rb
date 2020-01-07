@@ -7,7 +7,8 @@ require_relative '../ext/tempfile'
 module Builder::Rlang
   class Builder
 
-    RLANG_COMPILER = File.expand_path('../../../../bin/rlang', __FILE__)
+    LIB_DIR = File.expand_path('../../../../lib', __FILE__)
+    RLANG = File.expand_path('../../../../bin/rlang', __FILE__)
 
     attr_reader :source, :target, :wat_path
 
@@ -20,7 +21,7 @@ module Builder::Rlang
       @source = source # Path to Rlang file
       @target = target
       @options = options
-      system("#{RLANG_COMPILER} #{@options} --wasm -o #{target} #{@source}")
+      system("ruby -I#{LIB_DIR} -- #{RLANG} #{@options} --wasm -o #{target} #{@source}")
     end
 
     def cleanup
