@@ -933,7 +933,7 @@ module Rlang::Parser
         wattr_nodes = node.children[2..-1]
         wattr_nodes.each do |wan|
           logger.debug "processing wattr node #{wan}"
-          raise "attribute name must be a symbol" unless wan.type == :sym
+          raise "attribute name must be a symbol (got #{wan})" unless wan.type == :sym
           wattr_name = wan.children.last
           if (wattr = wnode.find_wattr(wattr_name))
             raise "attribute #{wattr_name} already declared" if wattr
@@ -1312,7 +1312,6 @@ module Rlang::Parser
         raise "method #{method_name} got #{arg_nodes.count} arguments (expected 1)" \
           unless arg_nodes.count <= 1
         wn_args = arg_nodes.collect {|n| parse_node(n, wn_op)}
-
         @wgenerator.operands(wn_op, wn_recv, wn_args)
         logger.debug "  After type cast:  #{wn_op} wtype: #{wn_op.wtype}, op children types: #{wn_op.children.map(&:wtype)}"
         # Drop last evaluated result if asked to
