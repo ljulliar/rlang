@@ -104,7 +104,7 @@ end
 The code is pretty straightforward: a new square instance is created, its side is set to 10 and as you would expect the call to the Square#area method would return 100.
 
 ### Class attribute type
-In the example above the `side` attribute is implicitely using the `i32` (long integer) WebAssembly type. It's the default Rlang type. Assuming you want to manage big squares, you'd have to use `i64` (double integer) like this for the `side` attribute and also instruct Rlang that the return value of area is also `i64` (more on this later).
+In the example above the `side` attribute is implicitely using the `:I32` (long integer) WebAssembly type. It's the default Rlang type. Assuming you want to manage big squares, you'd have to use `:I64` (double integer) like this for the `side` attribute and also instruct Rlang that the return value of area is also `:I64` (more on this later).
 
 ```ruby
 class Square
@@ -127,17 +127,17 @@ Methods in Rlang are defined as you would normally do in Ruby by using. They can
 ### Method arguments
 Rlang method definition supports fixed name arguments in any number. The  *args and **args notation are not supported.
 
-By default all arguments in Rlang are considered as being type i32 (a 32 bit integer). See the Type section below for more details. If your argument is of a different type you **must** explicitely state it. 
+By default all arguments in Rlang are considered as being type `:I32` (a 32 bit integer). See the Type section below for more details. If your argument is of a different type you **must** explicitely state it. 
 ```ruby
 def self.m_two_args(arg1, arg2, arg3)
   arg arg1: :Square, arg2: :I64
   # your code here...
 end
 ```
-In the example above arg1 is of type Square (the class we defined earlier), arg2 is of type :I64 and arg3 not being mention in the arg list of of default type (:I32)
+In the example above arg1 is of type Square (the class we defined earlier), arg2 is of type `:I64` and arg3 not being mention in the arg list of of default type (`:I32`)
 
 ### Return result
-Unless otherwise stated, a method must return a value of type :I32 (the default type in Rlang). If your method returns nothing or a value of a different type you have to say so with the `result` directive.
+Unless otherwise stated, a method must return a value of type `:I32` (the default type in Rlang). If your method returns nothing or a value of a different type you have to say so with the `result` directive.
 
 ```ruby
 def self.m_no_return_value(arg1, arg2)
@@ -157,7 +157,7 @@ Rlang also gives you the ability to declare the return type of a method like thi
 result class_name, method_name, wasm_type
 ```
 
-This result directive must be used to instruct the compiler about the return type of a method if it has not seen it yet (e.g. the method definition is coming later in your source code). But keep in mind that this only needed when the method returns something different than the default type (:I32).
+This result directive must be used to instruct the compiler about the return type of a method if it has not seen it yet (e.g. the method definition is coming later in your source code). But keep in mind that this only needed when the method returns something different than the default type (`:I32`).
 
 For an example see the [test_def_result_type_declaration.rb](https://github.com/ljulliar/rlang/blob/master/test/rlang_files/test_def_result_type_declaration.rb), a Rlang file that is part of the Rlang test suite.
 
@@ -196,7 +196,7 @@ Note that the `export` keyword only applies to the method definition that immedi
 WASM exported functions are named after the class name (in lower case) followed by an underscore and the method name. So the exported method in the example above is known to the WASM runtime as the `myclass_c_visible` function (where the `_c_` means it's a class function and `_i_` an instance method)
 
 ## Rlang types
-The types currently supported by Rlang are integers either long (:I32) or double (:I64) or a class type. Float types (:F32, :F64) may follow in a future version. By default Rlang assumes that any integer literal, variable, argument,... is of type :I32. If you need it to be of a different type you must state it explicitely in the method body (see above).
+The types currently supported by Rlang are integers either long (`:I32`) or double (`:I64`) or a class type. Float types (:F32, :F64) may follow in a future version. By default Rlang assumes that any integer literal, variable, argument,... is of type `:I32`. If you need it to be of a different type you must state it explicitely in the method body (see above).
 
 ### Implicit type cast
 Only in rare cases will you use the `local` directive in methods as Rlang does its best to infer the type of a variable from its first assigned value. As an example, in the code below, the fact that `arg1` is known to be an `:I64` type of argument is enough to auto-magically create lvar as in `:I64` local variable too.
@@ -214,7 +214,7 @@ Conversely in the method below the first statement `lvar = 10` auto-vivifies `lv
 ```ruby
 def self.m_local_var(arg1)
   arg :arg1, :I64
-  lvar = 10 # lvar is auto-vivified as i32
+  lvar = 10 # lvar is auto-vivified as :I32
   lvar = arg1 * 100
   # ....
 end
@@ -236,7 +236,7 @@ The first line will auto-vivify the `@@cvar` class variable as type `:I64`.
 
 The second example turns the value `123876` into a pointer to a `Square` object. In the absence of dynamic object instantiation this allows you to create your own object at runtime by allocating WebAssembly memory and pointing to it as if it was an object of you choice (see Rlang library below for memory management) 
 
-For :I32 and :I64 type cast you can also use the following shortcuts `100.to_I64` or `100.to_I32`
+For `:I32` and `:I64` type cast you can also use the following shortcuts `100.to_I64` or `100.to_I32`
 
 Note that type cast can be used anywhere in the code whether in class body or method definition.
 
@@ -339,7 +339,7 @@ end
 ```
 What this code sample does is to multiply the method argument by 10 (in Ruby) and then inline some WAT code that squares this argument. The reason for the `ruby:` keyword argument is to give the equivalent Ruby code that will be used when you run your Rlang code in the Rlang simulator (still in development).
 
-A third keyword argument `wtype:` also allows to specifiy the WebAssembly type produced by the fragment of inlined WAT code. By default it is assumed to produce an `i32`. If not you can either specify `wtype: :I64` or `wtype: :none`
+A third keyword argument `wtype:` also allows to specifiy the WebAssembly type produced by the fragment of inlined WAT code. By default it is assumed to produce an `:I32`. If not you can either specify `wtype: :I64` or `wtype: :none`
 
 ## The Rlang library
 Rlang comes with a library that provides a number of pre-defined classes and methods (written in Rlang of course) that you can use by adding the following statement in your Rlang files
