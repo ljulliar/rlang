@@ -58,7 +58,7 @@ class WType
   end
 
   def class?
-    ('A'..'Z').include?(@name.to_s[0])
+    !self.native? && ('A'..'Z').include?(@name.to_s[0])
   end
 
   def ==(other)
