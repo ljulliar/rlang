@@ -10,6 +10,6 @@ require_relative './cvar'
 # Constants and Class variables are managed
 # in exactly the same way
 module Rlang::Parser
-  class Const < Cvar
+  class Const < CVar
   end
 end

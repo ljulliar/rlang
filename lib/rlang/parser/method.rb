@@ -3,40 +3,46 @@
 # All rights reserved.
 
 # Class variables
-
-require_relative './ext/type'
+require_relative '../../utils/log'
+require_relative './wtype'
 require_relative './export'
 
 module Rlang::Parser
   # Note: Cannot use Method as class name
   # because it's already used by Ruby
   class MEthod
+    include Log
 
     attr_reader :name, :wtype
     attr_accessor :class_name
 
-    def initialize(name, class_name, wtype=Type::I32)
+    def initialize(name, class_name, wtype=WType::DEFAULT)
       @name = name
       @class_name = class_name
       @wtype = wtype
+      @instance = false
+      logger.debug "Method instance created #{self.inspect}"
+    end
+
+    def instance!
+      @instance = true
+    end
+
+    def instance?
+      @instance
     end
 
     def wtype=(wtype)
-      if wtype.is_a? Symbol
-        if wtype == :none || wtype == nil
-          @wtype =nil
-        else
-          @wtype = Type::ITYPE_MAP[wtype]
-        end
-      elsif wtype.nil? || wtype.ancestors.include?(Numeric)
-        @wtype = wtype
-      else
-        raise "Error: unknown Type #{wtype}"
-      end
+      @wtype = wtype
+      logger.debug "Method wtype updated: #{self.inspect}"
     end
 
     def wasm_name
-      "$#{@class_name}::#{@name}"
+      if @instance
+        "$#{@class_name}##{@name}"
+      else
+        "$#{@class_name}::#{@name}"
+      end
     end
 
     def wasm_type
@@ -44,7 +50,11 @@ module Rlang::Parser
     end
 
     def export_name
-      "#{@class_name.downcase}_#{@name}"
+      if @instance
+        "#{@class_name.downcase}_i_#{@name}"
+      else
+        "#{@class_name.downcase}_c_#{@name}"
+      end
     end
 
     def export!

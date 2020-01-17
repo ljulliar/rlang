@@ -4,29 +4,18 @@
 
 # Local variables
 
-require_relative './ext/type'
+require_relative './wtype'
 
 module Rlang::Parser
-  class Lvar
-    attr_reader :name, :wtype
+  class LVar
+    attr_reader :name
+    attr_accessor :wtype
 
-    def initialize(name, wtype=Type::I32)
+    def initialize(name, wtype=WType::DEFAULT)
       @name = name
       # TODO: check if local/param value wtype
       # was explicitely declared
       @wtype = wtype
-    end
-
-    # TODO: factorize this code somewhere.
-    # Also used in cvar, method and wgenerator
-    def wtype=(wtype)
-      if wtype.is_a? Symbol
-        @wtype = Type::ITYPE_MAP[wtype]
-      elsif wtype.nil? || wtype.ancestors.include?(Numeric)
-        @wtype = wtype
-      else
-        raise "Error: unknown Type #{wtype}"
-      end
     end
 
     def wasm_name

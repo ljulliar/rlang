@@ -5,9 +5,11 @@
 # Nodes used to generate WASM code 
 
 require_relative  '../../utils/log'
+require_relative './wtype'
 require_relative './const'
 require_relative './cvar'
 require_relative './lvar'
+require_relative './wattr'
 require_relative './method'
 
 module Rlang::Parser
@@ -28,7 +30,7 @@ module Rlang::Parser
       local_set: 'local.set %{var_name}',
       global_get: 'global.get %{var_name}',
       global_set: 'global.set %{var_name}',
-      addr: 'i32.const %{addr}',
+      addr: 'i32.const %{value}',
       operator: '%{wasm_type}.%{operator}',
       const: '%{wasm_type}.const %{value}',
       drop: 'drop',
@@ -45,12 +47,20 @@ module Rlang::Parser
       br_if: 'br_if %{label}',
       br: 'br %{label}',
       inline: '%{code}',
+      wattr_reader: %q{func %{func_name} (param $_ptr_ i32) (result %{wtype})
+  (%{wtype}.load offset=%{offset} (local.get $_ptr_))},
+      wattr_writer: %q{func %{func_name} (param $_ptr_ i32) (param %{wattr_name} %{wtype}) (result %{wtype})
+  (local.get %{wattr_name})
+  (%{wtype}.store offset=%{offset} (local.get $_ptr_) (local.get %{wattr_name}))},
+  #(%{wtype}.load offset=%{offset} (local.get $_ptr_))},
+      class_size: %q{func %{func_name} (result %{wtype})
+  (%{wtype}.const %{size})}
     }
 
     attr_accessor :type, :wargs, :children, :parent, :comment, :lvars, :cvars, :margs,
                   :consts, :methods, :method, :template, :keep_on_stack,
                   :class_wnodes
-    attr_reader   :wtype, :label, :klass_name
+    attr_reader   :wtype, :label, :klass_name, :klass_size, :wattrs
 
     @@label_index = 0
 
@@ -69,13 +79,14 @@ module Rlang::Parser
       # WASM type of this node. If node is :method
       # then it's the type of the return value (nil
       # means no value returned)
-      @wtype = Type::DEFAULT_TYPE
+      @wtype = WType::DEFAULT
 
       # For root wnode
       @class_wnodes = [] # wnodes of classes
 
       # For class wnode only
       @klass_name = nil
+      @wattrs  = [] # class attributes
       @cvars   = [] # class variables=
       @consts  = [] # class constants
       @methods = [] # methods
@@ -98,6 +109,12 @@ module Rlang::Parser
       self == @@root
     end
 
+    # Says whether this wnode produces a straight
+    # WASM const node in the end
+    def const?
+      self.template == :const || self.template == :addr
+    end
+
     # set instruction template and args
     def c(template, wargs = {})
       raise "Error: unknown WASM code template (#{template})" unless T.has_key? template
@@ -107,7 +124,6 @@ module Rlang::Parser
       end
       @template = template
       @wargs = wargs
-      #self.wtype = wargs[:wtype] if wargs.has_key? :wtype
     end
 
     def wasm_code
@@ -116,7 +132,7 @@ module Rlang::Parser
     end
 
     def wasm_type
-      @wtype ? @wtype.wasm_type : ''
+      @wtype.wasm_type
     end
     
     def set_label
@@ -125,23 +141,13 @@ module Rlang::Parser
 
     # Specify the WASM type of this node
     def wtype=(wtype)
-      if wtype.is_a? Symbol
-        # wtype can be provided as a short symbol :I32, :I64,...
-        if wtype == :none || wtype == nil
-          @wtype = nil
-        else
-          @wtype = Type::ITYPE_MAP[wtype]
-        end
-      elsif wtype.nil? || wtype.ancestors.include?(Numeric)
-        # or as a Type class or nil
-        @wtype = wtype
-      else
-        raise "Error: unknown wtype #{wtype.inspect}"
-      end
+      raise "Expecting a WType argument (got #{wtype.inspect}" unless wtype.is_a? WType
+      logger.debug "Setting wtype #{wtype} for wnode #{self}"
+      @wtype = wtype
       @method.wtype = @wtype if self.method?
       # update wasm_type template arg accordingly
-      logger.debug "type #{self.type} wargs #{self.wargs} wtype #{@wtype.inspect}"
       @wargs[:wasm_type] = @wtype.wasm_type if @wtype
+      logger.debug "type #{self.type} wargs #{self.wargs} wtype #{@wtype}"
       @wtype
     end
 
@@ -200,6 +206,22 @@ module Rlang::Parser
       (cn = self.class_wnode) ? cn.klass_name : nil
     end
 
+    # Find class name in this node and up the tree
+    def class_size
+      (cn = self.class_wnode) ? cn.wattrs.sum(&:size) : nil
+    end
+
+    # Find the class wnode matching with the given
+    # class name
+    def find_class(class_name=nil)
+      if class_name
+        WNode.root.class_wnodes.find { |wn| wn.class_name == class_name }
+      else
+        self.class_wnode
+      end     
+    end
+
+    # create a constant 
     def create_const(c_name, class_name, value, wtype)
       class_name ||= self.class_name
       if (cn = self.class_wnode)
@@ -213,13 +235,9 @@ module Rlang::Parser
     # Look for constant in the appropriate class wnode
     # (it can be the current class or another class)
     def find_const(c_name, class_name=nil)
-      if class_name
-        wn_class = WNode.root.class_wnodes.find { |wn| wn.class_name == class_name}
-      else
-        wn_class   = self.class_wnode
-        class_name = self.class_name
-      end
-      class_name ||= self.class_name
+      wn_class = find_class(class_name)
+      raise "Can't find parent class for constant #{c_name}" unless wn_class
+      class_name = wn_class.class_name
       logger.debug "looking for const #{c_name} in class #{class_name} at wnode #{self.class_wnode}..."
       wn_class.consts.find { |c| c.class_name == class_name && c.name == c_name }
     end
@@ -228,12 +246,30 @@ module Rlang::Parser
       self.find_const(c_name, class_name) || self.create_const(c_name, class_name, value, wtype)
     end
 
-    def create_cvar(cv_name, value=0, wtype=Type::I32)
+    def find_wattr(wa_name, class_name=nil)
+      wn_class = find_class(class_name)
+      raise "Can't find parent class for wattr #{wa_name}" unless wn_class
+      class_name = wn_class.class_name
+      logger.debug "looking for wattr #{wa_name} in class #{class_name} at wnode #{self.class_wnode}..."
+      wn_class.wattrs.find { |wa| wa.class_name == class_name && wa.name == wa_name }
+    end
+
+    def create_wattr(wa_name, wtype=WType::DEFAULT)
+      if (cn = self.class_wnode)
+        logger.debug "creating wattr #{wa_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
+        cn.wattrs << (wattr = WAttr.new(cn, wa_name, wtype))
+      else
+        raise "No class found for class attribute #{wa_name}"
+      end
+      wattr
+    end
+
+    def create_cvar(cv_name, value=0, wtype=WType::DEFAULT)
       if (cn = self.class_wnode)
         logger.debug "creating cvar #{cv_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
-        cn.cvars << (cvar = Cvar.new(cn.klass_name, cv_name, value, wtype))
+        cn.cvars << (cvar = CVar.new(cn.klass_name, cv_name, value, wtype))
       else
-        raise "No class found for class variable #{cvar}"
+        raise "No class found for class variable #{cv_name}"
       end
       cvar
     end
@@ -245,7 +281,7 @@ module Rlang::Parser
 
     def create_lvar(name)
       if (mn = self.method_wnode)
-        mn.lvars << (lvar = Lvar.new(name))
+        mn.lvars << (lvar = LVar.new(name))
       else
         raise "No method found for local variable #{name}"
       end
@@ -263,7 +299,7 @@ module Rlang::Parser
     # add method argument
     def create_marg(name)
       if (mn = self.method_wnode)
-        mn.margs << (marg = Marg.new(name))
+        mn.margs << (marg = MArg.new(name))
       else
         raise "No class found for class variable #{marg}"
       end
@@ -274,19 +310,34 @@ module Rlang::Parser
       self.method_wnode.margs.find { |ma| ma.name == name }
     end
 
-    def create_method(method_name, class_name=nil)
+    def create_method(method_name, class_name=nil, wtype=WType::DEFAULT)
+      raise "MEthod already exists: #{m}" \
+        if (m = find_method(method_name, class_name))
       if (cn = self.class_wnode)
         class_name ||= cn.klass_name
-        cn.methods << (method = MEthod.new(method_name, class_name))
+        cn.methods << (method = MEthod.new(method_name, class_name, wtype))
       else
-        raise "No class wnode found for method creation #{method_name}"
+        raise "No class wnode found to create method #{method_name}"
       end
+      logger.debug "Created MEthod: #{method.inspect}"
       method
     end
 
     def find_method(method_name, class_name=nil)
-      class_name ||= self.class_wnode.klass_name
-      self.class_wnode.methods.find { |m| m.name == method_name && m.class_name = class_name }
+      if class_name
+        class_wnode = find_class(class_name)
+      else
+        class_wnode = self.class_wnode
+      end
+      raise "Couldn't find class wnode for class_name #{class_name}" unless class_wnode
+      class_name = class_wnode.klass_name
+      method = class_wnode.methods.find { |m| m.name == method_name && m.class_name = class_name }
+      if method
+        logger.debug "Found MEthod: #{method.inspect}"
+      else
+        logger.debug "Couldn't find MEthod: #{class_name.inspect},#{method_name.inspect}"
+      end
+      method
     end
 
     def find_or_create_method(method_name, class_name=nil)
@@ -329,14 +380,23 @@ module Rlang::Parser
       end
     end
 
-    def func_name
-      raise "Error: func_name is for :method wnode type only (got #{self.type})" \
-        unless self.method?
-      "$#{self.class_name}::#{@method.name}"
+    def scope
+      return :class_method if self.in_class_method_scope?
+      return :instance_method if self.in_instance_method_scope?
+      return :class if self.in_class_scope?
+      return :root if self.in_root_scope?
     end
 
     def in_method_scope?
       !self.method_wnode.nil?
+    end
+
+    def in_class_method_scope?
+      !self.method_wnode.nil? && !self.method_wnode.method.instance?
+    end
+
+    def in_instance_method_scope?
+      !self.method_wnode.nil? && self.method_wnode.method.instance?
     end
 
     def in_class_scope?

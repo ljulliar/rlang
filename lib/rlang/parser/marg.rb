@@ -5,27 +5,18 @@
 # Method argument class
 
 require_relative '../../utils/log'
-require_relative './ext/type'
+require_relative './wtype'
 
 module Rlang::Parser
-  class Marg
+  class MArg
     include Log
-    attr_reader :name, :wtype
+    attr_reader :name
+    attr_accessor :wtype
 
-    def initialize(name, wtype=Type::I32)
+    def initialize(name, wtype=WType::DEFAULT)
       @name = name
-      self.wtype = wtype
+      @wtype = wtype
       logger.debug "Method argument #{name} created"
-    end
-
-    def wtype=(wtype)
-      if wtype.is_a? Symbol
-        @wtype = Type::ITYPE_MAP[wtype]
-      elsif wtype.nil? || wtype.ancestors.include?(Numeric)
-        @wtype = wtype
-      else
-        raise "Error: unknown Type #{wtype}"
-      end
     end
 
     def wasm_name

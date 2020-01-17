@@ -27,7 +27,7 @@ class RlangTest < Minitest::Test
 
   def setup
     # Name of wasm test method to call
-    @wfunc = "test_#{self.name}"
+    @wfunc = "test_c_#{self.name}"
     # Compile rlang test file to WASM bytecode
     test_file = File.join(TEST_FILES_DIR,"#{self.name}.rb")
     @builder = Builder::Rlang::Builder.new()
@@ -299,4 +299,11 @@ class RlangTest < Minitest::Test
     assert_equal 6, @instance.exports.send(@wfunc, 0)
   end
 
+  def test_wattr_definition
+    assert_equal 10004, @instance.exports.send(@wfunc, 5)
+  end
+
+  def test_wattr_definition_with_type
+    assert_equal 1_000_000_000_000, @instance.exports.send(@wfunc, 1_000_000)
+  end
 end

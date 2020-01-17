@@ -1,4 +1,4 @@
-$BIG_NUMBER = 400_000_000_000.to_i64
+$BIG_NUMBER = 400_000_000_000.to_I64
 
 class Test
   export

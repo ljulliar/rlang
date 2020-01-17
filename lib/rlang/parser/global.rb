@@ -4,7 +4,7 @@
 
 # Class variables
 
-require_relative './ext/type'
+require_relative './wtype'
 require_relative './export'
 
 module Rlang::Parser
@@ -12,7 +12,7 @@ module Rlang::Parser
     @@globals = []
     attr_accessor :name, :wtype, :mutable, :value
 
-    def initialize(name, wtype=Type::I32, value=0, mutable=true)
+    def initialize(name, wtype=WType::DEFAULT, value=0, mutable=true)
       @name = name
       @wtype = wtype
       @mutable = mutable

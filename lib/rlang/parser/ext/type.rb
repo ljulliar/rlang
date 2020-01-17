@@ -59,13 +59,6 @@ module Type
     end
   end
 
-  ITYPE_MAP = {
-    I64: Type::I64,
-    I32: Type::I32,
-    F64: Type::F64,
-    F32: Type::F32
-  }
-
-  DEFAULT_TYPE = Type::I32
+  DEFAULT = Type::I32
 
 end

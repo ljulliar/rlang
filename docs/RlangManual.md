@@ -1,23 +1,24 @@
 # The Rlang language
 
-Rlang is a subset of the Ruby language that is meant to provide a certain level of abstration and expresiveness while keeping its translation to WebAssembly relatively straightforward. 
+Rlang is a subset of the Ruby language that is meant to provide a certain level of abstration and expressiveness while keeping its translation to WebAssembly straightforward. 
 
-Ruby programmers will feel at home with Rlang and non Ruby programmers might still find it useful to generate efficient WebAssembly code from a language that is much easier to use.
+Ruby programmers will feel at home with Rlang and non Ruby programmers will find it useful to generate efficient WebAssembly code from a language that is much easier to use.
 
-Still, to make this Ruby to WebAssembly translation possible we had to make some compromise. The goal of this document is to explain what those limitations are compared to standard Ruby.
+Still, to make this Ruby to WebAssembly compilation possible a number of trade-offs had to be made. The goal of this document is to explain what the language of the Rlang features are and how it differs from plain Ruby.
 
 ## The Rlang object model
 
-To be blunt, there is no such thing as a *Rlang object model* for the reason that Rlang does **not** support object instantiation. Why is that? Well, object instantiation in Ruby means, among other things, that we are capable of allocating memory dynamically. Something WebAssembly is not capable of doing out of the box. Supporting this would more or less mean that Rlang becomes a Ruby virtual machine and this is absolutely not the intent. What the intent is with Rlang is to provide you with a language that can assist you in developing such a Virtual Machine for instance ;-)
+In Rlang you can define classes and those classes can be instantiated but *only* statically not dynamically. Supporting dynamic object allocation would more or less mean that Rlang becomes a Ruby virtual machine and this is not the intent. What the intent is with Rlang is to provide you with a language that can assist you in developing such a Virtual Machine for instance ;-)
+
+One of the consequence of this for instance is that you can statically instantiate a new object in the body of a class not in a method. In other words objects can be instantiated at compile time not at runtime.
 
 ## What Rlang does
 
-The above limitation on the object model might look like a serious handicap to you but you'll be surprised at how much you can achieve with Rlang in no time.
-
 Rlang provides:
-* Classes and class variables
+* Classes, class attributes and class variables
+* Object instantiation (only at compile time)
 * Method definition and method calls
-* Integers (both long and double or i32 and i64 to use the WebAssembly terminology) 
+* Integers (both long and double or I32 and I64 to use the WebAssembly terminology) 
 * Constants
 * Global variables
 * Control constructs (if, while, until, break, next,...)
@@ -44,11 +45,11 @@ end
 calling that method later in your code is as simple as invoking `Math.fib(20)`
 
 ## Classes
-Classes are core constructs of Rlang. A Class plays the role of a namespace.
+Classes are core constructs of Rlang and are very similar to Ruby classes.
 
-Within a class you define methods and class variables. Actually any method must be defined within a class. In other words you can not syntactically define a method at the top level as you could do in Ruby (not a very good practice anyway). Also there is no inheritance mechanism in Rlang.
+Within a class you define methods and class variables. Actually all methods must be defined within a class. In other words you can not define a method at the top level of your Rlang code (not a very good practice anyway, even in plain Ruby). Also there is no inheritance mechanism in Rlang in the current version.
 
-Here is an example of a class definition and the initialization and use of a class variable
+Here is an example of a class definition and the initialization and use of a class variable written in Rlang:
 
 ```ruby
 class MyClass
@@ -65,32 +66,81 @@ class MyClass
 end
 ```
 
-This short piece of code shows you several interesting points:
+This short piece of code shows several interesting points:
 1. A class variable can be statically initialized at the class level. Concretely this means that at compile time the memory location corresponding to the `@@cvar` class variable initially receives the value 100.
-1. Since there is no objects in Rlang, all methods must be defined as class methods, hence the use of `self.take_one` and `self.refill` in method definitions
-1. In `MyClass::take_one` you see how to call a method from the same class. You also see that you can use if as a modifier too. You can also combine operation and assignment as in Ruby (here the `-=` operator)
+1. Methods in this example are class methods, hence the use of `self.take_one` and `self.refill` in method definitions but instance methods are also supported (more on this later)
+1. In `MyClass::take_one` you can see that Rlang also supports convenient syntactic sugar like `if` as a modifier or combined operation and assignment as in Ruby (here the `-=` operator)
+
+### Class attributes
+Since objects cannot be instantiated at runtime in Rlang, there is no such thing as instance variable. Rlang uses a special directive `wattr` to do 4 things at once: 
+1. Define the attributes of a class (see that as its instance variables somehow)
+2. Define the type of the attributes (remember, Rlang is a compiler...)
+2. Define the corresponding accessors both getter and setter (like `attr_accessor` does in Ruby)
+3. Compute the memory footprint needed when objects of this class are instantiated.
+
+That's a lot with a single statement and it makes your code easy to read. Here is an example
+```ruby
+class Square
+  wattr :side
+
+  def area
+    self.side * self.side
+  end
+end
+```
+Later in your code you could use this class in your code as follows
+
+```ruby
+class Test
+  @@square = Square.new
+
+  def self.my_method
+    @@square.side = 10
+    @@square.area
+  end
+end
+```
+
+The code is pretty straightforward: a new square instance is created, its side is set to 10 and as you would expect the call to the Square#area method would return 100.
+
+### Class attribute type
+In the example above the `side` attribute is implicitely using the `i32` (long integer) WebAssembly type. It's the default Rlang type. Assuming you want to manage big squares, you'd have to use `i64` (double integer) like this for the `side` attribute and also instruct Rlang that the return value of area is also `i64` (more on this later).
+
+```ruby
+class Square
+  wattr :side
+  wattr_type side: :I64
+
+  def area
+    result :I64
+    self.side * self.side
+  end
+end
+```
+
+## Object instantiation
+In Rlang objects must be instantiated at compile time not at runtime. As a result of this, all object instantiation must happen in the body of a class not in a method. You have already seen an example of such an object instantiation in the previous example with `Square.new`.
 
 ## Methods
-As there is no such such thing as object instances in Rlang right now, only class methods are supported. You define class method as you would normally do in Ruby by using `def self.method_name` 
+Methods in Rlang are defined as you would normally do in Ruby by using. They can be either class or instance methods.
 
 ### Method arguments
-Rlang method definition supports fixed name arguments in any number. So the following are all valid method definitions: `def self.m_no_arg`, `def self.m_two_args(arg1, arg2)`
+Rlang method definition supports fixed name arguments in any number. The  *args and **args notation are not supported.
 
 By default all arguments in Rlang are considered as being type i32 (a 32 bit integer). See the Type section below for more details. If your argument is of a different type you **must** explicitely state it. 
 ```ruby
-def self.m_two_args(arg1, arg2)
-  arg :arg2, :I64
+def self.m_two_args(arg1, arg2, arg3)
+  arg arg1: :Square, arg2: :I64
   # your code here...
 end
 ```
-In the example above arg1 is of type i32 (the default type) and assuming arg2 is of type i64, it must be explicitely declared as such.
+In the example above arg1 is of type Square (the class we defined earlier), arg2 is of type :I64 and arg3 not being mention in the arg list of of default type (:I32)
 
 ### Return result
-Unless otherwise stated, a method must always return an integer value of type i32 (the default type in Rlang). If your method doesn't return anything or a value of a different type you have to say so with the `result` directive.
+Unless otherwise stated, a method must return a value of type :I32 (the default type in Rlang). If your method returns nothing or a value of a different type you have to say so with the `result` directive.
 
 ```ruby
 def self.m_no_return_value(arg1, arg2)
-  arg :arg2, :I64
   result :none
   # your code here
   # ...
@@ -98,28 +148,31 @@ def self.m_no_return_value(arg1, arg2)
   return
 end
 ```
-Similarly you can use `return :I64` if your method is to return a double integer value.
+Similarly you can use `return :I64` if your method is to return a double integer value or `return :Square` if you method returns an object.
 
-With a few exceptions (see the Conditional and Iteration Structures sections below), each Rlang statements evaluate to a value. In the absence of a `return some_expression` statement, a method returns the value of the last evaluated statement. In the example above the method `MyClass::take_one` returns the value of `@@cvar` after decreasing it by one and `MyClass::refill` returns 100.
+With a few exceptions (see the Conditional and Iteration Structures sections below), each Rlang statements evaluate to a value. In the absence of an explicit `return some_expression` statement, a method returns the value of the last evaluated statement. In the example above the method `MyClass::take_one` returns the value of `@@cvar` after decreasing it by one and `MyClass::refill` returns 100.
 
 Rlang also gives you the ability to declare the return type of a method like this 
-```result class_name, method_name, wasm_type```
+```ruby
+result class_name, method_name, wasm_type
+```
 
-This result directive must be used whenever a method is used in your Rlang source code **before** it is actually parsed. See it as a type declaration like stattically typed language. But keep in mind that this only needed if the method returns something different than the default type (i32).
+This result directive must be used to instruct the compiler about the return type of a method if it has not seen it yet (e.g. the method definition is coming later in your source code). But keep in mind that this only needed when the method returns something different than the default type (:I32).
 
-For an example see the [test_def_result_type_declaration.rb](https://github.com/ljulliar/rlang/blob/master/test/rlang_files/test_def_result_type_declaration.rb) test file.
+For an example see the [test_def_result_type_declaration.rb](https://github.com/ljulliar/rlang/blob/master/test/rlang_files/test_def_result_type_declaration.rb), a Rlang file that is part of the Rlang test suite.
 
 ### Local variables
 Local variable used in a method body doesn't have to be declared. They are auto-vivified the first time you assign a value to it. In some cases though, you may have to use the `local` directive as in the example below to explicitely state the type of a local variable.
 
 ```ruby
 def self.m_local_var(arg1)
-  local :lvar, :I64
+  local lvar: :I64, mysquare: :Square
   lvar = 10
+  mysquare = @@square
   # ....
 end
 ```
-In this example, without the `local :lvar, :I64` directive, `lvar` would have been typed as `i32` because the assigned value (here `10`) is itself interpreted as an `i32` value by default. 
+In this example, the `local` directive instructs the compiler that `lvar` is of type `:I64` and the local variable mysquare is of type `Square`.
 
 ### Exporting a method
 In WebAssembly, you can make functions visible to the outside world by declaring them in the export section. To achieve a similar result in Rlang, you can use the `export` keyword right before a method definition. 
@@ -128,11 +181,11 @@ In WebAssembly, you can make functions visible to the outside world by declaring
 class MyClass
 
   export
-  def self.m_visible(arg1)
+  def self.visible(arg1)
     # ...
   end
 
-  def self.m_not_visible
+  def self.not_visible
     # ...
   end
 end
@@ -140,13 +193,13 @@ end
 
 Note that the `export` keyword only applies to the method definition that immediately follows. In the example above `MyClass::m_visible` will be exported by the generated WASM module whereas `MyClass::m_not_visible` will not
 
-WASM exported functions are named after the class name (in lower case) followed by an underscore and the method name. So the exported method in the example above is known to the WASM runtime as the `myclass_m_visible` function.
+WASM exported functions are named after the class name (in lower case) followed by an underscore and the method name. So the exported method in the example above is known to the WASM runtime as the `myclass_c_visible` function (where the `_c_` means it's a class function and `_i_` an instance method)
 
 ## Rlang types
-The only types currently supported by Rlang are integers either long (`i32`) or double (`i64`). Float may follow in a future version. By default Rlang assumes that any integer literal and variable is of type `i32`. If you need it to be of a different type you must state it explicitely in the method body (see above).
+The types currently supported by Rlang are integers either long (:I32) or double (:I64) or a class type. Float types (:F32, :F64) may follow in a future version. By default Rlang assumes that any integer literal, variable, argument,... is of type :I32. If you need it to be of a different type you must state it explicitely in the method body (see above).
 
 ### Implicit type cast
-Only in rare cases will you use the `local` directive in methods as Rlang does its best to infer the type of a variable from its first assigned value. As an example, in the code below, the fact that `arg1` is known to be an `i64` type of argument is enough to auto-magically create lvar as in `i64` local variable too
+Only in rare cases will you use the `local` directive in methods as Rlang does its best to infer the type of a variable from its first assigned value. As an example, in the code below, the fact that `arg1` is known to be an `:I64` type of argument is enough to auto-magically create lvar as in `:I64` local variable too.
 
 ```ruby
 def self.m_local_var(arg1)
@@ -156,7 +209,7 @@ def self.m_local_var(arg1)
 end
 ```
 
-Conversely in the method below the first statement `lvar = 10` auto-vivifies `lvar` as a variable of type `i32` (the default Rlang type. On the next line, Rlang will determine that `arg1 * 100` gives an `i64` result (because `arg1` is declared as being of type `i64` and, consequently automatically type casting the result of the expression to `i32` because this is the type of `lvar`.Such a type cast may of course result in the value being truncated and the Rlang compiler will emit a warning accordingly.
+Conversely in the method below the first statement `lvar = 10` auto-vivifies `lvar` as a variable of type `:I32` (the default Rlang type). On the next line, Rlang evaluates `arg1 * 100` as an `:I64` result because `arg1` is declared as being of type `:I64`. Similarly as the type of `lvar` local variable was auto-vivified as `:I32`, the result of the expression `arg1 * 100` will be type cast from `:I64` to `:I32`. Note that Such a type cast may of course result in the value being truncated and the Rlang compiler will emit a warning accordingly.
 
 ```ruby
 def self.m_local_var(arg1)
@@ -168,17 +221,24 @@ end
 ```
 
 ### Explicit type cast
-Finally if Rlang is not capable of guessing the proper type of an expression and declaring the variable type explicitely is not possible (e.g. for global or class variables), you can use the specific type cast methods `to_i32` or `to_i64`
-
-Going back to the first example in class `MyClass`, what if you wanted to create the class variable @@cvar1 as an i64 variable ? This is where the type cast methods come handy. As in example below:
+If Rlang is not capable of guessing the proper type of an expression or variable, you can explicitely cast it to any known type. Look at this example:
 
 ```ruby
 class MyClass
-  @@cvar = 100.to_i64
+  @@cvar = 100.cast_to(:I64)
+  @@square = 123876.cast_to(:Square)
   # your code here
   #...
 end
 ```
+
+The first line will auto-vivify the `@@cvar` class variable as type `:I64`. 
+
+The second example turns the value `123876` into a pointer to a `Square` object. In the absence of dynamic object instantiation this allows you to create your own object at runtime by allocating WebAssembly memory and pointing to it as if it was an object of you choice (see Rlang library below for memory management) 
+
+For :I32 and :I64 type cast you can also use the following shortcuts `100.to_I64` or `100.to_I32`
+
+Note that type cast can be used anywhere in the code whether in class body or method definition.
 
 ## Constants
 Rlang supports constants too  and you can invoke constants from different classes as you would in Ruby. In the example below the `TestB::m_constants` returns 1001 as a result
@@ -200,7 +260,7 @@ end
 ```
 
 ## Global variables
-Rlang provides global variable as well. Whereas a constant can only be defined within the scope of a class definition, a global variable can be defined anywhere. When defined at the top level one can only assign a literal value like 100 (or 100.to_i64) in the example. Assigning an expression can only be done within the scope of a method.
+Rlang provides global variable as well. Whereas a constant can only be defined within the scope of a class definition, a global variable can be defined anywhere. When defined at the top level one can only assign a literal value like 100 (or 100.to_I64). Assigning an expression can only be done within the scope of a method.
 
 ```ruby
 $MYGLOBAL = 100
@@ -222,7 +282,7 @@ Rlang supports the following Ruby conditional statements:
 * if-elsif-....- elsif-end
 * as well as if and unless use as modifiers
 
-**IMPORTANT REMARK** As opposed to Ruby, Rlang conditional statements never evaluates to a value. This is not much of a problem as even in regular Ruby code this feature is rarely used. However you might want to pay attention to some corner cases like the fibonacci method shown at the beginning of this document. In regular Ruby you would use the following code:
+**IMPORTANT REMARK** As opposed to Ruby, Rlang conditional statements never evaluates to a value. This is not much of a problem as even in regular Ruby code this feature is rarely used. However you might want to pay attention to some corner cases like in the fibonacci method shown at the beginning of this document. In regular Ruby you would use the following code:
 
 ```ruby
 def self.fib(n)
@@ -234,7 +294,7 @@ def self.fib(n)
 end
 ```
 
-but as the if and else clauses doesn't return any value in Rlang you'll need to collect the value in a local variable and return that value with an explicit return statement as in the first example
+but as the if and else clauses doesn't return any value in Rlang you must collect the value in a local variable and return that local variable with an explicit return statement.
 
 ## Iteration statements
 Rlang supports the following Ruby iteration statements:
@@ -288,6 +348,6 @@ Rlang comes with a library that provides a number of pre-defined classes and met
 require 'rlang/lib'
 ```
 
-For now, the Rlang library is very modest and only contains WebAssembly memory management functions like Memory::size and Memory::grow
+For now, the Rlang library is very modest and only contains basic WebAssembly memory management functions like `Memory::size` and `Memory::grow`. Moe will come soon.
 
 That's it! Enjoy Rlang and, as always, feedback and contributions are welcome.

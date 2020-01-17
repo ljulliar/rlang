@@ -2,7 +2,7 @@
 
 Rlang is meant to create fast and uncluttered [WebAssembly](https://webassembly.org) code from the comfort of the Ruby language.
 
-Rlang is not a new language and it is not intended to be a general purpose languange. It is actually two things: a supported subset of the Ruby language and a compiler ("translator" would actually be more appropriate) transforming this Ruby subset in a valid and fully runnable WebAssembly module.
+Rlang is not a new language and it is not intended to be a general purpose languange. It is actually two things: 1) a supported subset of the Ruby language and 2) a **compiler** transforming this Ruby subset in a valid, fully runnable and native WebAssembly module.
 
 Rlang can be seen as a foundational language that can help you quickly develop and debug high performance WebAssembly modules. For the rationale behind the creation of Rlang see below.
 
@@ -20,7 +20,7 @@ Rlang is not yet published as a gem. This will come soon. In the meantime, clone
 
 ```
 $ gem build rlang.gemspec
-$ gem install --local rlang-0.1.0.gem
+$ gem install --local rlang-0.2.0.gem
 ```
 
 To check that the installation went well, run `rlang --help` and see if the help message displays correctly
@@ -31,12 +31,14 @@ Ruby features supported by Rlang are detailed in the [Rlang Manual](https://gith
 You can also look at the rlang test suite in [test/rlang_files](https://github.com/ljulliar/rlang/blob/master/test/rlang_files/) to get a flavor of the subset of Ruby currently supported.
 
 ## rlang compiler
-The Rlang compiler can be invoked through the `rlang` command. See the [Rlang Compiler Documentation](https://github.com/ljulliar/rlang/blob/master/docs/RlangCompiler.md) for more details about th command line options.
+The Rlang compiler can be invoked through the `rlang` command. See the [Rlang Compiler Documentation](https://github.com/ljulliar/rlang/blob/master/docs/RlangCompiler.md) for more details about the command line options.
+
+It is important to understand that Rlang is **NOT** a Ruby interpreter or a Ruby VM written in WebAssembly. It does actually statically compile the Rlang language to WebAssembly code.
 
 
 ## rlang simulator
 **COMING SOON**
-One of the benefits of Rlang being a subset of the Ruby language is that you can actually run, test and debug your Rlang code as you would for normal Ruby code. This can be a big boost for your productivity.
+One of the big benefits of Rlang being a subset of the Ruby language is that you can actually run, test and debug your Rlang code as you would for normal Ruby code. This can be a big boost for your productivity.
 
 ## Why Rlang?
 This project was created out of the need to develop a Virtual Machine written in WebAssembly capable of interpreting the [Rubinius](https://github.com/rubinius/rubinius) bytecode. And yes, ultimately running a native Ruby VM in a browser :-)

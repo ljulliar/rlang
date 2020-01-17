@@ -6,15 +6,16 @@
 # Note: Const class inherits from this class
 
 require_relative '../../utils/log'
-require_relative './ext/type'
+require_relative './wtype'
 require_relative './data'
 
 module Rlang::Parser
-  class Cvar
+  class CVar
     include Log
-    attr_reader :name, :wtype, :class_name
+    attr_reader :name, :class_name
+    attr_accessor :wtype
 
-    def initialize(class_name, name, value=0, wtype=Type::I32)
+    def initialize(class_name, name, value=0, wtype=WType::DEFAULT)
       @name = name
       @class_name = class_name
       @wtype = wtype
@@ -30,16 +31,6 @@ module Rlang::Parser
 
     def value
       @data.value
-    end
-
-    def wtype=(wtype)
-      if wtype.is_a? Symbol
-        @wtype = Type::ITYPE_MAP(wtype)
-      elsif wtype.nil? || wtype.ancestors.include?(Numeric)
-        @wtype = wtype
-      else
-        raise "Error: unknown Type #{wtype}"
-      end
     end
 
     def wasm_name

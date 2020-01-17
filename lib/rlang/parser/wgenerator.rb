@@ -50,8 +50,14 @@ module Rlang::Parser
     :'!'   => :eqz
   }
 
-  # Type cast order in decreading order of precedence
-  TYPE_CAST_PRECEDENCE = [Type::F64, Type::F32, Type::I64, Type::I32]
+  # Matrix of how to cast a type to another
+  CAST_OPS = {
+    I32: { I32: :cast_nope, I64: :cast_extend, F32: :cast_notyet, F64: :cast_notyet, Other: :cast_wtype},
+    I64: { I32: :cast_wrap, I64: :cast_nope, F32: :cast_notyet, F64: :cast_notyet, Other: :cast_error},    
+    F32: { I32: :cast_notyet, I64: :cast_notyet, F32: :cast_nope, F64: :cast_notyet, Other: :cast_error},    
+    F64: { I32: :cast_notyet, I64: :cast_notyet, F32: :cast_notyet, F64: :cast_nope, Other: :cast_error},    
+    Other: { I32: :cast_wtype, I64: :cast_extend, F32: :cast_error, F64: :cast_error, Other: :cast_wtype}    
+  } 
 
   # Generate the wasm nodes and tree structure
   # ***IMPORTANT NOTE***
@@ -66,27 +72,72 @@ module Rlang::Parser
     def initialize(parser)
       @parser = parser
       @root = WTree.new().root
+      @new_count = 0
     end
 
-    def klass(wnode, const_node)
+    def klass(wnode, klass_name)
       wn = WNode.new(:class, wnode)
-      wn.class_name = const_node.children.last
+      wn.class_name = klass_name
+      wn.wtype = WType.new(wn.class_name)
       WNode.root.class_wnodes << wn
       wn
     end
 
-    def method(wnode, method)
-      logger.debug("method #{method}")
+    def attributes(wnode)
+      wnc = wnode.class_wnode
+      return if wnc.wattrs.empty?
+      # Process each declared attribute
+      offset = 0
+      wnc.wattrs.each do |wa|
+        logger.debug("Generating accessors for attribute #{wa}")
+        # Generate setter method wnode
+        wn_set = WNode.new(:insn, wnc, true)
+        wn_set.c(:wattr_writer, func_name: wa.setter.wasm_name, 
+              wattr_name: wa.wasm_name, wtype: wa.wasm_type,
+              offset: offset)
+        # Create getter method and corresponding wnode
+        wn_get = WNode.new(:insn, wnc, true)
+        wn_get.c(:wattr_reader, func_name: wa.getter.wasm_name, 
+              wattr_name: wa.wasm_name, wtype: wa.wasm_type,
+              offset: offset)
+        # Update offset
+        offset += wa.wtype.size
+      end
+
+      # also generate the Class::size method
+      size_method = wnc.create_method('size')
+      size_method.instance!
+      wns = WNode.new(:insn, wnc, true)
+      wns.wtype = WType::DEFAULT 
+      wns.c(:class_size, func_name: size_method.wasm_name, 
+            wtype: wns.wasm_type, size: wnc.class_size)
+    end
+
+    def instance_method(wnode, method)
+      logger.debug("Generating wnode for instance method #{method.inspect}")
       wn = WNode.new(:method, wnode)
       wn.method = method # must be set before calling func_name
       wn.wtype = method.wtype
-      wn.c(:func, func_name: wn.func_name)
-      logger.debug("wn.wtype #{wn.wtype}, wn.method #{wn.method}")
+      wn.c(:func, func_name: wn.method.wasm_name)
+      # Also declare a "hidden" parameter representing the
+      # pointer to the instance (always default wtype)
+      wn.create_marg(:_ptr_)
+      logger.debug("MEthod built: #{wn.method.inspect}")
+      wn
+    end
+
+    def class_method(wnode, method)
+      logger.debug("Generating wnode for class method #{method}")
+      wn = WNode.new(:method, wnode)
+      wn.method = method # must be set before calling func_name
+      wn.wtype = method.wtype
+      wn.c(:func, func_name: wn.method.wasm_name)
+      logger.debug("Building method: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
       wn
     end
 
     def params(wnode)
-      wnode = wnode.method_wnode unless wnode.method?
+      wnode = wnode.method_wnode
       # use reverse to preserve proper param order
       wnode.margs.reverse.each do |marg|
         logger.debug("Prepending param #{marg}")
@@ -97,7 +148,7 @@ module Rlang::Parser
     end
 
     def result(wnode)
-      unless wnode.wtype.nil?
+      unless wnode.wtype.blank?
         wn = WNode.new(:insn, wnode, true)
         wn.wtype = wnode.wtype
         wn.c(:result)      
@@ -105,7 +156,7 @@ module Rlang::Parser
     end
 
     def locals(wnode)
-      wnode = wnode.method_wnode unless wnode.method?
+      wnode = wnode.method_wnode
       wnode.lvars.reverse.each do |lvar|
         logger.debug("Prepending local #{lvar.inspect}")
         wn = WNode.new(:insn, wnode, true)
@@ -131,7 +182,7 @@ module Rlang::Parser
     def const(wnode, const)
       (wn = WNode.new(:insn, wnode)).wtype = const.wtype
       wn.c(:load, wtype: const.wtype, var_name: const.wasm_name)
-      WNode.new(:insn, wn).c(:addr, addr: const.address)
+      WNode.new(:insn, wn).c(:addr, value: const.address)
       wn
     end
 
@@ -154,7 +205,7 @@ module Rlang::Parser
     def cvasgn(wnode, cvar)
       (wn = WNode.new(:insn, wnode)).wtype = cvar.wtype
       wn.c(:store, wtype: cvar.wtype)
-      WNode.new(:insn, wn).c(:addr, addr: cvar.address)
+      WNode.new(:insn, wn).c(:addr, value: cvar.address)
       wn
     end
 
@@ -162,12 +213,11 @@ module Rlang::Parser
     def cvar(wnode, cvar)
       (wn = WNode.new(:insn, wnode)).wtype = cvar.wtype
       wn.c(:load, wtype: cvar.wtype, var_name: cvar.wasm_name)
-      WNode.new(:insn, wn).c(:addr, addr: cvar.address)
+      WNode.new(:insn, wn).c(:addr, value: cvar.address)
       wn
     end
 
-    # Create the local variable storage node and
-    # an empty expression node to populate later
+    # Create the local variable storage node 
     def lvasgn(wnode, lvar)
       (wn = WNode.new(:insn, wnode)).wtype = lvar.wtype
       wn.c(:local_set, wtype: lvar.wtype, var_name: lvar.wasm_name)
@@ -179,17 +229,6 @@ module Rlang::Parser
       (wn = WNode.new(:insn, wnode)).wtype = lvar.wtype
       wn.c(:local_get, wtype: lvar.wtype, var_name: lvar.wasm_name)
       wn
-    end
-
-    # wnode already contains the variable writer operation
-    # and its last child is an empty wnode ready to populate
-    # with the expression to compute
-    def op_asgn(wnode, op_wtype, op)
-      raise "Error: unknown operator #{op}" \
-        unless ARITHMETIC_OPS_MAP.has_key? op
-      (op_wnode = WNode.new(:insn, wnode)).wtype = op_wtype
-      op_wnode.c(:operator, wtype: op_wtype, operator: ARITHMETIC_OPS_MAP[op])
-      op_wnode
     end
 
     def drop(wnode)
@@ -215,6 +254,54 @@ module Rlang::Parser
       wn
     end
 
+    # All the cast_xxxx methods below returns
+    # the new wnode doing the cast operation
+    # or the same wnode if there is no additional code
+    # for the cast operation
+    def cast_nope(wnode, wtype, signed)
+      # Do nothing
+      wnode
+    end
+
+    def cast_extend(wnode, wtype, signed)
+      if (wnode.template == :const)
+        # it's a WASM const, simply change the wtype
+        wnode.wtype = wtype
+        wn_cast_op = wnode
+      else
+        wn_cast_op = wnode.insert(:insn)
+        wn_cast_op.wtype = wtype
+        wn_cast_op.c(signed ? :extend_i32_s : :extend_i32_u , wtype: wtype)
+      end
+      wn_cast_op
+    end
+
+    def cast_wtype(wnode, wtype, signed)
+      wnode.wtype = wtype
+      wnode
+    end
+
+    def cast_wrap(wnode, wtype, signed)
+      if (wnode.template == :const)
+        # it's a WASM const, simply change the wtype
+        wnode.wtype = wtype
+        wn_cast_op = wnode
+      else
+        wn_cast_op = wnode.insert(:insn)
+        wn_cast_op.wtype = wtype
+        wn_cast_op.c(:wrap_i64, wtype: wtype)
+      end
+      wn_cast_op
+    end
+
+    def cast_notyet(wnode, wtype, signed)
+      raise "Type cast from #{wnode.wtype} to #{wtype} not supported yet"
+    end
+
+    def cast_error(wnode, wtype, signed)
+      raise "Cannot cast type #{src} to #{dest}. Time to fix your code :-)"
+    end
+
     # cast an expression to a different type
     # if same type do nothing
     # - wnode: the wnode to type cast 
@@ -222,59 +309,23 @@ module Rlang::Parser
     # - signed: whether the cast wnode must be interpreted as a signed value
     #
     # TODO: simplify this complex method (possibly by using
-    # a conversion table source type -> target type)
+    # a conversion table source type -> destination type)
     def cast(wnode, wtype, signed=false)
       logger.debug "wnode: #{wnode}, wtype: #{wtype}"
+      src_type  = (wnode.wtype.native? ? wnode.wtype.name : :Other)
+      dest_type = (wtype.native? ? wtype.name : :Other)
+      cast_method = CAST_OPS[src_type] && CAST_OPS[src_type][dest_type] || :cast_error
 
-      if wnode.wtype == Type::I32
-        if wtype == Type::I64
-          if (wnode.template == :const)
-            # it's a const so don't do a cast but
-            # simply change the const node wtype
-            wnode.wtype = wtype
-          else
-            wn_cast_op = wnode.insert(:insn)
-            wn_cast_op.wtype = wtype
-            wn_cast_op.c(signed ? :extend_i32_s : :extend_i32_u , wtype: wtype)
-          end
-        elsif wtype == Type::I32
-          # Do nothing
-        else
-          # TODO: float type cast
-          raise "Error: don't know how to cast #{wnode.wtype.inspect} to #{wtype.inspect} in #{wnode}"
-        end
-      elsif wnode.wtype == Type::I64
-        if wtype == Type::I32
-          if (wnode.template == :const)
-            # it's a const so don't do a cast but
-            # simply change the const node wtype
-            wnode.wtype = wtype
-          else
-            wn_cast_op = wnode.insert(:insn)
-            wn_cast_op.wtype = wtype
-            wn_cast_op.c(:wrap_i64, wtype: wtype)
-          end
-        elsif wtype == Type::I64
-          # Do nothing
-        else
-          # TODO: float type cast
-          raise "Error: don't know how to cast #{self.wtype.inspect} to #{wtype.inspect} in #{wnode}"
-        end
-      elsif wnode.wtype == Type::F32
-        # TODO: float type cast
-        raise "Error: don't know how to cast #{self.wtype.inspect} to #{wtype.inspect} in #{wnode}"
-      elsif wnode.wtype == Type::F64
-        raise "Error: don't know how to cast #{self.wtype.inspect} to #{wtype.inspect} in #{wnode}"
-      end
-      logger.debug "After type cast: wnode: #{wn_cast_op || wnode}, wtype: #{wtype}"
-      wn_cast_op || wnode
+      wn_cast_op = self.send(cast_method, wnode, wtype, signed)
+      logger.debug "After type cast: wnode: #{wn_cast_op}, wtype: #{wtype}"
+      wn_cast_op
     end
 
     # just create a wnode for the WASM operator
     # Do not set wtype or a code template yet,
     # wait until operands type is known (see
     # operands below)
-    def operator(wnode, operator, wtype=:none)
+    def operator(wnode, operator, wtype=WType.new(:none))
       if (op = (ARITHMETIC_OPS_MAP[operator] || 
                 RELATIONAL_OPS_MAP[operator] ||
                 BOOLEAN_OPS_MAP[operator]    ||
@@ -304,20 +355,32 @@ module Rlang::Parser
       self.cast(wnode_args.first, wtype).reparent_to(wnode) unless wnode_args.empty?
     end
 
-    def call(wnode, recv_node, method_name)
-      if recv_node.type == :self
-        class_name = wnode.class_name
-      elsif recv_node.type == :const
-        class_name = recv_node.children.last
-      else
-        raise "Error: can only call method on self or class objects (got #{recv_node})"
-      end
-      func_name = "$#{class_name}::#{method_name}"
+    # Statically allocate an object in data segment
+    # with the size of the class
+    def new(wnode, class_name)
+      class_wnode = wnode.find_class(class_name)
+      data_label = "#{class_name}_new_#{@new_count += 1}"
+      data = DAta.new(data_label.to_sym, "\x00"*class_wnode.class_size)
+      (wn_object_addr = WNode.new(:insn, wnode)).c(:addr, value: data.address)
+      # VERY IMPORTANT the wtype of this node is the Class name !!!
+      wn_object_addr.wtype = WType.new(class_name.to_sym)
+      wn_object_addr
+    end
+
+    def call(wnode, class_name, method_name)
       method = wnode.find_or_create_method(method_name, class_name)
       logger.debug "found method #{method.inspect}"
-      (call_node = WNode.new(:insn, wnode)).c(:call, func_name: func_name)
-      call_node.wtype = method.wtype
-      call_node
+      (wn_call = WNode.new(:insn, wnode)).c(:call, func_name: method.wasm_name)
+      wn_call.wtype = method.wtype
+      wn_call
+    end
+
+    # self in an instance context is passed as the first argument
+    # of a method call
+    def _self(wnode)
+      (wns = WNode.new(:insn, wnode)).c(:local_get, var_name: '$_ptr_')
+      wns.wtype = WType.new(wnode.class_name)
+      wns
     end
 
     def return(wnode)
@@ -375,36 +438,12 @@ module Rlang::Parser
       # branch to that label
       (wn = WNode.new(:insn, wnode)).c(:br, label: wnode.loop_wnode.label)
     end
-=begin
-    def and(wnode, wnode_cond1_exp, wnode_cond2_exp)
-      send(wnode, :&&, wnode_recv, wnode_args)
-      wtype = self.class.leading_wtype(wnode_cond1_exp, wnode_cond2_exp)
-      wn = WNode.new(:insn, wnode)
-      wn.wtype = wtype; wn.c(:operator, wtype: wtype, operator: :and)
-      self.cast(wnode_cond1_exp, wtype).reparent_to(wn)
-      self.cast(wnode_cond2_exp, wtype).reparent_to(wn)
-      wn
-    end
-
-    def or(wnode, wnode_cond1_exp, wnode_cond2_exp)
-      wtype = self.class.leading_wtype(wnode_cond1_exp, wnode_cond2_exp)
-      wn = WNode.new(:insn, wnode)
-      wn.wtype = wtype; wn.c(:operator, wtype: wtype, operator: :or)
-      self.cast(wnode_cond1_exp, wtype).reparent_to(wn)
-      self.cast(wnode_cond2_exp, wtype).reparent_to(wn)
-      wn
-    end
-=end
-    def not(wnode)
-    end
 
     private
     # Determine which wasm type has precedence among
     # all wnodes
     def self.leading_wtype(*wnodes)
-      TYPE_CAST_PRECEDENCE[
-        wnodes.map(&:wtype).map {|wt| TYPE_CAST_PRECEDENCE.index(wt)}.sort.first
-      ]
+      WType.leading(wnodes.map(&:wtype))
     end
   end
 end

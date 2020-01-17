@@ -3,6 +3,6 @@ class Test
   export
   def self.test_def_return_i64
     result :I64
-    return (3 * 7).to_i64
+    return (3 * 7).to_I64
   end
 end

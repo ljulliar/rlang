@@ -1,6 +1,6 @@
 require_relative '../../utils/log'
 require_relative './ext/string'
-require_relative './ext/type'
+require_relative './wtype'
 require_relative './ext/integer'
 
 
@@ -17,7 +17,7 @@ module Rlang::Parser
 
     attr_reader :label, :wtype, :address, :value
 
-    def initialize(label, value, wtype=Type::I32)
+    def initialize(label, value, wtype=WType::DEFAULT)
       raise "Data label '#{label}' already initialized" \
         if self.class.exist? label
       @label = label
@@ -53,7 +53,7 @@ module Rlang::Parser
       @@label_table[label].address
     end
 
-    def self.append(label, value, wtype=Type::I32)
+    def self.append(label, value, wtype=WType::DEFAULT)
       logger.debug "appending #{value} to DAta[#{label}]"
       if self.exist? label
         @@label_table[label].append_value(value, wtype)
@@ -81,6 +81,7 @@ module Rlang::Parser
     def self.transpile
       output = []
       @@label_table.sort_by {|s,d| d.address}.each do |s,d|
+        logger.debug "Generating data #{d.inspect}"
         address = d.address
         d.value.each do |elt|
           if elt.is_a? String

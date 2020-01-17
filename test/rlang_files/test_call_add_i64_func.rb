@@ -15,6 +15,6 @@ class Test
   # explicitely cast result as i64
   def self.test_def_return_i64
     result :I64
-    (3 + 7).to_i64
+    (3 + 7).cast_to(:I64)
   end
 end
