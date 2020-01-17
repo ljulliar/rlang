@@ -339,19 +339,33 @@ module Rlang::Parser
 
     # finish the setting of the operator node and
     # attach operands
-    def operands(wnode, wnode_recv, wnode_args)
-      raise "#{method_name} expects 0 or 1 argument (got #{wnode_args.count})" \
-        if wnode_args.count > 1
+    def operands(wnode_op, wnode_recv, wnode_args)
+      raise "only 0 or 1 operand expected (got #{wnode_args.count})" if wnode_args.count > 1
 
       # First find out the wtype that has precedence
       wtype = self.class.leading_wtype(wnode_recv, *wnode_args)
-      wnode.wtype = wtype
+      wnode_op.wtype = wtype
       logger.debug "leading type cast: #{wtype}"
 
       # Attach receiver and argument to the operator wnode
       # type casting them if necessary
-      self.cast(wnode_recv, wtype).reparent_to(wnode)
-      self.cast(wnode_args.first, wtype).reparent_to(wnode) unless wnode_args.empty?
+      self.cast(wnode_recv, wtype).reparent_to(wnode_op)
+      self.cast(wnode_args.first, wtype).reparent_to(wnode_op) unless wnode_args.empty?
+
+      # if the receiver is a class object and not
+      # a native integer then pointer arithmetic
+      # applies (like in C)
+      if wnode_recv.wtype.class?
+        raise "Only +, -, == and != operators are supported on objects" \
+          unless [:add, :sub, :eq, :ne].include? wnode_op.wargs[:operator]
+        # if + or - operator then multiply arg by size of object
+        if [:add, :sub].include? wnode_op.wargs[:operator]
+          (wn_mulop = WNode.new(:insn, wnode_op)).c(:operator, operator: :mul)
+          WNode.new(:insn, wn_mulop).c(:const, 
+            value: lambda { wnode_recv.find_class(wnode_recv.wtype.name).class_size })
+          wnode_args.first.reparent_to(wn_mulop)
+        end
+      end
     end
 
     # Statically allocate an object in data segment

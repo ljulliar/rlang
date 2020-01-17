@@ -214,6 +214,10 @@ class RlangTest < Minitest::Test
     assert_equal 40_000_000_000, @instance.exports.send(@wfunc, 20000)
   end
 
+  def test_local_var_chained_asgn
+    assert_equal 555, @instance.exports.send(@wfunc)
+  end 
+
   def test_local_var_set
     assert_equal 1000, @instance.exports.send(@wfunc)
   end    
@@ -261,6 +265,11 @@ class RlangTest < Minitest::Test
 
   def test_opasgn_local_var
     assert_equal 400, @instance.exports.send(@wfunc, 20)
+  end
+
+  def test_operator_on_object
+    base = @instance.exports.test_c_base
+    assert_equal 12*5, @instance.exports.send(@wfunc) - base
   end
 
   def test_operator_precedence
