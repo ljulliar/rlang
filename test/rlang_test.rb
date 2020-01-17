@@ -299,6 +299,10 @@ class RlangTest < Minitest::Test
     assert_equal 6, @instance.exports.send(@wfunc, 0)
   end
 
+  def test_wattr_class_size
+    assert_equal 24, @instance.exports.send(@wfunc)
+  end
+
   def test_wattr_definition
     assert_equal 10004, @instance.exports.send(@wfunc, 5)
   end

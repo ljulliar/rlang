@@ -106,7 +106,6 @@ module Rlang::Parser
 
       # also generate the Class::size method
       size_method = wnc.create_method('size')
-      size_method.instance!
       wns = WNode.new(:insn, wnc, true)
       wns.wtype = WType::DEFAULT 
       wns.c(:class_size, func_name: size_method.wasm_name, 
