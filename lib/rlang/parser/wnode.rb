@@ -187,7 +187,7 @@ module Rlang::Parser
       return if self.parent == wnode
       old_parent, new_parent = self.parent, wnode
       new_parent << self
-      old_parent >> self
+      old_parent >> self if old_parent
     end
 
     # insert a blank wnode above self, so between self wnode 
@@ -216,9 +216,8 @@ module Rlang::Parser
     # Find the class wnode matching with the given
     # class name
     def find_class(class_name=nil)
-      puts '$$$$$', class_name, class_name.class
       if class_name
-        WNode.root.class_wnodes.find { |wn| puts '****',wn.class_name; res = (wn.class_name == class_name); puts res; res }
+        WNode.root.class_wnodes.find { |wn| wn.class_name == class_name }
       else
         self.class_wnode
       end     
