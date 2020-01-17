@@ -128,7 +128,9 @@ module Rlang::Parser
 
     def wasm_code
       @wargs[:wasm_type] ||= self.wasm_type
-      T[@template] ? T[@template] % @wargs : ''
+      wargs = {}
+      @wargs.each { |k, v| wargs[k] = (v.is_a?(Proc) ? v.call : v) }
+      T[@template] ? T[@template] % wargs : ''
     end
 
     def wasm_type
@@ -214,8 +216,9 @@ module Rlang::Parser
     # Find the class wnode matching with the given
     # class name
     def find_class(class_name=nil)
+      puts '$$$$$', class_name, class_name.class
       if class_name
-        WNode.root.class_wnodes.find { |wn| wn.class_name == class_name }
+        WNode.root.class_wnodes.find { |wn| puts '****',wn.class_name; res = (wn.class_name == class_name); puts res; res }
       else
         self.class_wnode
       end     
