@@ -263,6 +263,10 @@ class RlangTest < Minitest::Test
     assert_equal 400, @instance.exports.send(@wfunc, 20)
   end
 
+  def test_operator_precedence
+    assert_equal 70304, @instance.exports.send(@wfunc)
+  end
+
   def test_require
     assert_equal 200, @instance.exports.send(@wfunc)
   end
