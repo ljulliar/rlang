@@ -50,6 +50,10 @@ class RlangTest < Minitest::Test
     assert_equal 0, @instance.exports.send(@wfunc, 8, 101)
   end
 
+  def test_bool_false
+    assert_equal 10101, @instance.exports.send(@wfunc)
+  end
+
   def test_bool_or
     assert_equal 1, @instance.exports.send(@wfunc, 11, 99)
     assert_equal 1, @instance.exports.send(@wfunc, 8, 50)
@@ -60,6 +64,10 @@ class RlangTest < Minitest::Test
   def test_bool_not
     assert_equal 0, @instance.exports.send(@wfunc, 10)
     assert_equal 1, @instance.exports.send(@wfunc, 11)
+  end
+
+  def test_bool_true
+    assert_equal 10101, @instance.exports.send(@wfunc)
   end
 
   def test_call_add_i64_func

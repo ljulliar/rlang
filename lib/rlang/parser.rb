@@ -189,6 +189,12 @@ module Rlang::Parser
       when :or, :and
         parse_logical_op(node, wnode, keep_eval)
 
+      when :true
+        parse_true(node, wnode, keep_eval)
+
+      when :false
+        parse_false(node, wnode, keep_eval)
+
       else
         raise "Unknown node type: #{node.type} => #{node}"
       end
@@ -588,6 +594,24 @@ module Rlang::Parser
 
       logger.debug "wn_int:#{wn_int} wtype:#{wn_int.wtype} keep_eval:#{keep_eval}"
       return wn_int
+    end
+
+    def parse_true(node, wnode, keep_eval)
+      wn_true = @wgenerator.int(wnode, WType::DEFAULT, 1)
+      # Drop last evaluated result if asked to
+      @wgenerator.drop(wnode) unless keep_eval
+
+      logger.debug "wn_true:#{wn_true} wtype:#{wn_true.wtype} keep_eval:#{keep_eval}"
+      return wn_true
+    end
+
+    def parse_false(node, wnode, keep_eval)
+      wn_false = @wgenerator.int(wnode, WType::DEFAULT, 0)
+      # Drop last evaluated result if asked to
+      @wgenerator.drop(wnode) unless keep_eval
+
+      logger.debug "wn_false:#{wn_false} wtype:#{wn_false.wtype} keep_eval:#{keep_eval}"
+      return wn_false
     end
 
     # Example

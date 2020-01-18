@@ -18,7 +18,7 @@ Rlang provides:
 * Classes, class attributes and class variables
 * Object instantiation (only at compile time)
 * Method definition and method calls
-* Integers (both long and double or I32 and I64 to use the WebAssembly terminology) 
+* Integers and booleans 
 * Constants
 * Global variables
 * Control constructs (if, while, until, break, next,...)
@@ -258,6 +258,18 @@ class TestB
   end
 end
 ```
+
+## Booelans
+Rlang the booleans `true` and `false`. You can use them in conditional statements like in the example below. As expected the `x` local variable equals would equal 10 when breaking from the loop
+
+```ruby
+x = 0
+while true
+  x += 1
+  break if x == 10 
+end
+```
+As opposed to Ruby though, `true` and `false`are not instances of TrueClass and FalseClass but are internally represented respectively as `1` and `0`. More generally in Rlang (pretty much like in C) any non zero integer value will be considered true. However we strongly advise against mixing boolean condition and integer arithmetics. Like in C this can lead to **very** nasty bugs that will be hard to debunk.
 
 ## Global variables
 Rlang provides global variable as well. Whereas a constant can only be defined within the scope of a class definition, a global variable can be defined anywhere. When defined at the top level one can only assign a literal value like 100 (or 100.to_I64). Assigning an expression can only be done within the scope of a method.
