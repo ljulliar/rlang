@@ -58,7 +58,7 @@ examples:
 options:
 }
 
-  opts.on("-I", "--load_path DIRECTORY", "specify $LOAD_PATH directory (may be used more than once)") do |dir|
+  opts.on("-I DIR", "--load_path DIRECTORY", "specify $LOAD_PATH directory (may be used more than once)") do |dir|
     options[:load_path] ||= []
     options[:load_path] << dir
   end
