@@ -9,7 +9,7 @@ require_relative '../lib/builder'
 
 class RlangTest < Minitest::Test
 
-  TEST_FILES_DIR = File.expand_path('../rlang_files', __FILE__)
+  TEST_FILES_DIR = File.expand_path('../rlang_test_files', __FILE__)
   RLANG_DIR = File.expand_path('../../lib', __FILE__)
 
   # Rlang compilation options by method
@@ -74,12 +74,24 @@ class RlangTest < Minitest::Test
     assert_equal 20, @instance.exports.send(@wfunc)
   end
   
-  def test_call_method
+  def test_call_class_method
     assert_equal 5200, @instance.exports.send(@wfunc, 500)
   end
-  
+
+  def test_call_instance_method
+    assert_equal 1070503, @instance.exports.send(@wfunc, 6)
+  end
+
   def test_call_method_recursive
     assert_equal 28657, @instance.exports.send(@wfunc, 23)
+  end
+
+  def test_call_on_self_class
+    assert_equal 5020, @instance.exports.send(@wfunc)
+  end
+
+  def test_call_on_self_instance
+    assert_equal 5020, @instance.exports.send(@wfunc)
   end
 
   def test_call_other_class_method_and_add
@@ -259,6 +271,18 @@ class RlangTest < Minitest::Test
     assert_equal 32, @instance.exports.send(@wfunc)
   end    
 
+  def test_object_pointer_add
+    assert_equal 56, @instance.exports.send(@wfunc)
+  end  
+
+  def test_object_pointer_substract
+    assert_equal 28, @instance.exports.send(@wfunc)
+  end
+
+  def test_object_pointer_compare
+    assert_equal 1+4+128+256+512+2048+8192, @instance.exports.send(@wfunc)
+  end
+
   def test_opasgn_class_var
     assert_equal 900, @instance.exports.send(@wfunc)
   end    
@@ -273,6 +297,10 @@ class RlangTest < Minitest::Test
 
   def test_opasgn_local_var
     assert_equal 400, @instance.exports.send(@wfunc, 20)
+  end
+
+  def test_opasgn_setter
+    assert_equal 98, @instance.exports.send(@wfunc, 100)
   end
 
   def test_operator_on_object
@@ -321,7 +349,7 @@ class RlangTest < Minitest::Test
   end
 
   def test_wattr_class_size
-    assert_equal 24, @instance.exports.send(@wfunc)
+    assert_equal 28, @instance.exports.send(@wfunc)
   end
 
   def test_wattr_definition

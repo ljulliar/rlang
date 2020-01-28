@@ -103,54 +103,54 @@ module Rlang::Parser
     # - keep_eval: whether to keep the value of the evaluated
     #   WAT expression on stock or not
     def parse_node(node, wnode, keep_eval=true)
-      logger.debug "\n------------------------\n" + 
+      logger.debug "\n---------------------->>\n" + 
         "Parsing node: #{node}, wnode: #{wnode}, keep_eval: #{keep_eval}"
 
       case node.type
       when :self
-        parse_self(node, wnode)
+        wn = parse_self(node, wnode)
 
       when :class
-        parse_class(node, wnode)
+        wn = parse_class(node, wnode)
 
       when :defs
-        parse_defs(node, wnode)
+        wn = parse_defs(node, wnode, keep_eval)
 
       when :def
-        parse_def(node, wnode)
+        wn = parse_def(node, wnode, keep_eval)
 
       when :begin
-        parse_begin(node, wnode, keep_eval)
+        wn = parse_begin(node, wnode, keep_eval)
 
       when :casgn
-        parse_casgn(node, wnode, keep_eval)
+        wn = parse_casgn(node, wnode, keep_eval)
 
       when :cvasgn
-        parse_cvasgn(node, wnode, keep_eval)
+        wn = parse_cvasgn(node, wnode, keep_eval)
 
       when :gvasgn
-        parse_gvasgn(node, wnode, keep_eval)
+        wn = parse_gvasgn(node, wnode, keep_eval)
 
       when :lvasgn
-        parse_lvasgn(node, wnode, keep_eval)
+        wn = parse_lvasgn(node, wnode, keep_eval)
 
       when :op_asgn
-        parse_op_asgn(node, wnode, keep_eval)
+        wn = parse_op_asgn(node, wnode, keep_eval)
 
       when :lvar
-        parse_lvar(node, wnode, keep_eval)
+        wn = parse_lvar(node, wnode, keep_eval)
 
       when :ivar, :ivasgn
         raise "Instance variable not supported"
 
       when :cvar
-        parse_cvar(node, wnode, keep_eval)
+        wn = parse_cvar(node, wnode, keep_eval)
 
       when :gvar
-        parse_gvar(node, wnode, keep_eval)
+        wn = parse_gvar(node, wnode, keep_eval)
 
       when :int
-        parse_int(node, wnode, keep_eval)
+        wn = parse_int(node, wnode, keep_eval)
       
       when :float
         raise "float instructions not supported"
@@ -160,65 +160,66 @@ module Rlang::Parser
         raise "nil not supported"
 
       when :const
-        parse_const(node, wnode, keep_eval)
+        wn = parse_const(node, wnode, keep_eval)
 
       when :send
-        parse_send(node, wnode, keep_eval)
+        wn = parse_send(node, wnode, keep_eval)
 
       when :return
-        parse_return(node, wnode, keep_eval)
+        wn = parse_return(node, wnode, keep_eval)
       
       when :if
         #parse_if_with_result_type(node, wnode, keep_eval)
-        parse_if_without_result_type(node, wnode, keep_eval)
+        wn = parse_if_without_result_type(node, wnode, keep_eval)
       
       when :while
         #parse_while_with_result_type(node, wnode, keep_eval)
-        parse_while_without_result_type(node, wnode, keep_eval)
+        wn = parse_while_without_result_type(node, wnode, keep_eval)
       
       when :until
         #parse_while_with_result_type(node, wnode, keep_eval)
-        parse_while_without_result_type(node, wnode, keep_eval)
+        wn = parse_while_without_result_type(node, wnode, keep_eval)
       
       when :break
-        parse_break(node, wnode, keep_eval)
+        wn = parse_break(node, wnode, keep_eval)
 
       when :next
-        parse_next(node, wnode, keep_eval)
+        wn = parse_next(node, wnode, keep_eval)
 
       when :or, :and
-        parse_logical_op(node, wnode, keep_eval)
+        wn = parse_logical_op(node, wnode, keep_eval)
 
       when :true
-        parse_true(node, wnode, keep_eval)
+        wn = parse_true(node, wnode, keep_eval)
 
       when :false
-        parse_false(node, wnode, keep_eval)
+        wn = parse_false(node, wnode, keep_eval)
 
       else
         raise "Unknown node type: #{node.type} => #{node}"
       end
+      logger.debug "\n----------------------<<\n" + 
+        "End parsing node: #{node}, parent wnode: #{wnode}, keep_eval: #{keep_eval}\n generated wnode #{wn}" +
+        "\n----------------------<<\n"
+      wn
     end
 
     def parse_begin(node, wnode, keep_eval)
       child_count = node.children.count
+      logger.debug "child count: #{child_count}"
       wn = nil
       node.children.each_with_index do |n, idx|
+        logger.debug "processing begin node ##{idx}..."
         # A begin block always evaluates to the value of
-        # its last child except if this begin node
-        # is a child of a method definition with and a 'result' directive
-        # to :none
+        # its **last** child except
         if (idx == child_count-1)
-          if wnode.type == :method
-            local_keep_eval = !wnode.wtype.blank?
-          else
-            local_keep_eval = keep_eval
-          end
+          local_keep_eval = keep_eval
         else
           local_keep_eval = false
         end
-        logger.debug "node idx: #{idx}/#{child_count}, wnode type: #{wnode.type}, keep_eval: #{keep_eval}, local_keep_eval: #{local_keep_eval}"
+        logger.debug "node idx: #{idx}/#{child_count-1}, wnode type: #{wnode.type}, keep_eval: #{keep_eval}, local_keep_eval: #{local_keep_eval}"
         wn = parse_node(n, wnode, local_keep_eval)
+        logger.debug "in begin: parsing node #{n} gives wnode #{wn}"
       end
       return wn # return last wnode
     end
@@ -268,6 +269,15 @@ module Rlang::Parser
     # ---
     # s(:op_asgn,
     #    s(:gvasgn, :$MYGLOBAL), :-, s(:lvar, :nbytes))
+    #
+    #
+    # Example (setter/getter)
+    # p.size -= nunits
+    # ---
+    # (op-asgn
+    #   (send
+    #     (lvar :p) :size) :-
+    #   (lvar :nunits))
     #
     # **** DEPRECATED FORM OF GLOBALS *****
     # Example (Global)
@@ -333,21 +343,61 @@ module Rlang::Parser
         wn_op = @wgenerator.operator(wn_var_set, op, lvar.wtype)
         # Create the var getter node as a child of operator node
         wn_var_get = @wgenerator.lvar(wn_op, lvar)
+
+      # setter/getter case
+      # Example (setter/getter)
+      # p.size -= nunits
+      # ---
+      # (op-asgn
+      #   (send
+      #     (lvar :p) :size) :-
+      #   (lvar :nunits))
+      when :send
+        send_node, op, exp_node = *node.children
+        recv_node, method_name = *send_node.children
+
+        # Parse the receiver node ((lvar :p) in the example)
+        # above to get its wtype
+        # Force keep_eval to true whatever upper level 
+        # keep_eval says
+        wn_recv_node = parse_node(recv_node, wnode, true)
+
+        # Create the top level setter call
+        wn_var_set = @wgenerator.call(wnode, wn_recv_node.wtype.name, "#{method_name}=", :instance)
+
+        # First argument of the setter must be the recv_node
+        wn_recv_node.reparent_to(wn_var_set)
+
+        # Second argument of the setter is the operator wnode
+        # Create it with wtype :none for now. We'll fix that
+        # with the operands call later on
+        wn_op = @wgenerator.operator(wn_var_set, op)
+
+        # Parsing the send node will create the getter wnode
+        # this is the first argument of the operator wnode,
+        # the second is wn_exp below
+        # Force keep_eval to true whatever upper level 
+        # keep_eval says
+        wn_var_get = parse_node(send_node, wn_op, true)
+
+        # If the setter returns something and last evaluated value
+        # must be ignored then drop it
+        unless keep_eval && !wn_var_set.wtype.blank?
+          @wgenerator.drop(wnode)
+          #@wgenerator.call(wnode, wn_recv_node.wtype.name, "#{method_name}", :instance)
+        end
       else
-        raise "op_asgn not supported for variable type #{var_asgn_node}"
+        raise "op_asgn not supported for #{node.children.first}"
       end
 
-      # Finally, parse the expression node and make it a node
-      # of the second child of the operator node
+      # Finally, parse the expression node and make it
+      # the second child of the operator node
       # Last evaluated value must be kept of course
       wn_exp = parse_node(exp_node, wn_op, true)
+      
       # And process operands (cast and such...)
       @wgenerator.operands(wn_op, wn_var_get, [wn_exp])
 
-      # No need to drop last evaluated value even if
-      # asked to because var assignment never leaves
-      # any value on the WASM stack
-      # @wgenerator.drop(wnode) unless keep_eval
       return wn_var_set
     end
 
@@ -619,7 +669,6 @@ module Rlang::Parser
     # -------
     # (const (const (const nil :TESTA) :C) :MYCONST))
     def parse_const(node, wnode, keep_eval)
-
       # Build constant path from embeddec const sexp
       const_path = []
       n = node
@@ -670,24 +719,33 @@ module Rlang::Parser
     # def self.push(value)
     #   ...
     # end
-    def parse_defs(node, wnode)
+    def parse_defs(node, wnode, keep_eval)
       logger.debug "node: #{node}\nwnode: #{wnode}"
       recv_node, method_name, arg_nodes, body_node = *node.children
       raise "only class method is supported. Wrong receiver at #{recv_node.loc.expression}" if recv_node.type != :self
       logger.debug "recv_node: #{recv_node}\nmethod_name: #{method_name}"
 
       # create corresponding func node
-      method = wnode.find_or_create_method(method_name)
+      method = wnode.find_or_create_method(method_name, nil, :class)
       method.export! if @@export
       logger.debug "Method object : #{method.inspect}"
       wn_method = @wgenerator.class_method(wnode, method)
       # collect method arguments
       parse_args(arg_nodes, wn_method)
+      # Look for any result directive and parse it so 
+      # that we know what the return type is in advance
+      # If :nil for instance then it may change the way
+      # we generate code in the body of the method
+      if (result_node = body_node.children.find {|n| n.respond_to?(:type) && n.type == :send && n.children[1] == :result})
+        logger.debug "result directive found: #{result_node}"
+        parse_node(result_node, wn_method, keep_eval)
+      end
+
       # method body -- A method evaluates to its last 
       # computed value unless a result :nil directive
       # is specified
       logger.debug "method_name: #{method_name}, wtype: #{wn_method.wtype}"
-      parse_node(body_node, wn_method)
+      parse_node(body_node, wn_method, !wn_method.wtype.blank?)
 
       # Now that we have parsed the whole method we can 
       # prepend locals, result and method args to the
@@ -710,14 +768,13 @@ module Rlang::Parser
     # def push(value)
     #   ...
     # end
-    def parse_def(node, wnode)
+    def parse_def(node, wnode, keep_eval)
       logger.debug "node: #{node}\nwnode: #{wnode}"
       method_name, arg_nodes, body_node = *node.children
       logger.debug "method_name: #{method_name}"
 
       # create corresponding func node
-      method = wnode.find_or_create_method(method_name)
-      method.instance!
+      method = wnode.find_or_create_method(method_name, nil, :instance)
       method.export! if @@export
       logger.debug "Method object : #{method.inspect}"
       wn_method = @wgenerator.instance_method(wnode, method)
@@ -725,11 +782,20 @@ module Rlang::Parser
 
       # collect method arguments
       parse_args(arg_nodes, wn_method)
+      # Look for any result directive and parse it so 
+      # that we know what the return type is in advance
+      # If :nil for instance then it may change the way
+      # we generate code in the body of the method
+      if (result_node = body_node.children.find {|n| n.respond_to?(:type) && n.type == :send && n.children[1] == :result})
+        logger.debug "result directive found: #{result_node}"
+        parse_node(result_node, wn_method, keep_eval)
+      end
+
       # method body -- A method evaluates to its last 
       # computed value unless a result :nil directive
       # is specified
       logger.debug "method_name: #{method_name}, wtype: #{wn_method.wtype}"
-      parse_node(body_node, wn_method)
+      parse_node(body_node, wn_method, !wn_method.wtype.blank?)
 
       # Now that we have parsed the whole method we can 
       # prepend locals, result and method args to the
@@ -742,7 +808,6 @@ module Rlang::Parser
       @@export = false
       return wn_method
     end
-
 
     def parse_require(wnode, file)
       logger.debug "File required: #{file}"
@@ -772,19 +837,17 @@ module Rlang::Parser
         # Now try each possible extension foreach possible
         # directory in the load path
         load_path.each do |dir|
+          logger.debug "Searching in dir: #{dir}"
           break unless extensions.each do |ext|
-            full_path_file = File.expand_path(File.join(dir, file+ext))
-            if File.file?(full_path_file)
-              logger.debug "Found required file: #{full_path_file}"; break
+            fpf = File.expand_path(File.join(dir, file+ext))
+            if File.file?(fpf)
+              logger.debug "Found required file: #{fpf}"
+              full_path_file = fpf; break
             end
           end
         end
       end
-      if full_path_file
-        logger.debug "Found file: #{full_path_file}"
-      else
-        raise LoadError, "no such file to load: #{file}"
-      end
+      raise LoadError, "no such file to load: #{full_path_file}" unless full_path_file
 
       # Now load the file 
       if File.extname(full_path_file) == '.wat'
@@ -809,266 +872,10 @@ module Rlang::Parser
       logger.debug "recv_node #{recv_node}, method_name : #{method_name}"
       logger.debug "scope: #{wnode.scope}"
 
-      # Directive to require a file
-      # Example
-      # (send nil :require
-      #   (str "test5"))
-      if recv_node.nil? && method_name == :require
-        raise "require must be used at root level" \
-          unless wnode.in_root_scope?
-        file_node = node.children.last
-        raise "require only accepts a string argument (got #{file_node})" \
-          unless file_node.type == :str
-        parse_require(wnode, file_node.children.last)
-        return
+      if recv_node.nil?
+        return parse_send_nil_receiver(node, wnode, keep_eval)
       end
-
-      # Directive to require_a file relative to
-      # current file
-      # Example
-      # (send nil :require_relative
-      #   (str "test5"))
-      if recv_node.nil? && method_name == :require_relative
-        raise "require_relative must be used at root level" \
-          unless wnode.in_root_scope?
-        file_node = node.children.last
-        raise "require only accepts a string argument (got #{file_node})" \
-          unless file_node.type == :str
-        parse_require_relative(wnode, file_node.children.last)
-        return
-      end
-
-      # Directive to declare the current method
-      # in the WASM exports
-      if recv_node.nil? && method_name == :export
-        raise "export must be used in class scope" \
-          unless wnode.in_class_scope?
-        @@export = true
-        return
-      end
-
-      # Directive to define local variable type
-      # this must be processed at compile time
-      # if method name is :local then it is
-      # a type definition for a local variable
-      # local :value, :I64
-      # ---------
-      # s(:send, nil, :local,
-      #  (hash
-      #     (pair
-      #       s(:sym, :value)
-      #       s(:sym, :I64))
-      # ))
-      if recv_node.nil? && method_name == :local
-        hash_node = node.children.last
-        local_types = parse_type_args(hash_node, :local)
-        local_types.each do |name, wtype|
-          lvar = wnode.find_or_create_lvar(name)
-          raise "couldn't find or create local variable #{name}" unless lvar
-          lvar.wtype = WType.new(wtype)
-        end
-        return
-      end
-
-      # Directive to define method argument type
-      # this must be processed at compile time
-      # if method name is :arg then it is
-      # a type definition for a method argument
-      # arg value: :I64
-      # ---------
-      # s(:send, nil, :arg,
-      #  (hash
-      #     (pair
-      #       s(:sym, :value)
-      #       s(:sym, :I64))
-      # ))
-      if  recv_node.nil? && method_name == :arg
-        hash_node = node.children.last
-        marg_types = parse_type_args(hash_node, :argument)
-        marg_types.each do |name, wtype|
-          marg = wnode.find_marg(name)
-          raise "couldn't find method argument #{name}" unless marg
-          marg.wtype = WType.new(wtype)
-        end
-        return
-      end
-
-      # Directive to define method return type
-      # in the method itself
-      # this must be processed at compile time
-      # Supported types : :I32, :I64, :none 
-      # (:nil means no value is returned)
-      # 
-      # Example
-      # result :I64
-      # ---------
-      # s(:send, nil, :result,
-      #   s(:sym, :I64))
-      if recv_node.nil? && method_name == :result && wnode.in_method_scope?
-        result_type, = *node.children[2]
-        raise "result directive expects a symbol argument (got #{result_type}" \
-          unless result_type.is_a? Symbol
-        wnode.method_wnode.wtype = WType.new(result_type)
-        logger.debug "result_type #{result_type} updated for method #{wnode.method_wnode.method.inspect}"
-        return
-      end
-
-      # Directive to define method return type
-      # at the class level. This allows to declare
-      # a method type before the method is parsed
-      # this must be processed at compile time
-      # Supported types : :I32, :I64, :none 
-      # (:nil means no value is returned)
-      #
-      # Example
-      # result :class_name, :method_name, :I64
-      # ---------
-      # s(:send, nil, :result,
-      #   s(:sym, :class_name),
-      #   s(:sym, :method_name),
-      #   s(:sym, :I64))
-      if recv_node.nil? &&  method_name == :result && wnode.in_class_scope?
-        cn_name,  = *node.children[2]
-        mn_name,  = *node.children[3]
-        result_type, = *node.children[4]
-        legit_types = [:I32, :I64, :none]
-        unless legit_types.include? result_type
-          raise "method type must be one of #{legit_types} (got #{result_type.inspect})"
-        end
-        (mwn = wnode.find_or_create_method(mn_name, cn_name)).wtype = WType.new(result_type)
-        logger.debug "result_type #{mwn.wtype} for method #{mwn.name}"
-        return
-      end
-
-      # Directive to define class attributes. This defines
-      # a list of getters and setters and access them in
-      # memory with an offset from the base address given as
-      # an argument.
-      #
-      # Example
-      # wattr :ptr, :size
-      # ---------
-      # s(:send, nil, :wattr,
-      #   s(:sym, :ptr),
-      #   s(:sym, :size))
-      if recv_node.nil? && method_name == :wattr
-        raise "wattr directives can only happen in class scope" \
-          unless wnode.in_class_scope?
-        wattr_nodes = node.children[2..-1]
-        wattr_nodes.each do |wan|
-          logger.debug "processing wattr node #{wan}"
-          raise "attribute name must be a symbol (got #{wan})" unless wan.type == :sym
-          wattr_name = wan.children.last
-          if (wattr = wnode.find_wattr(wattr_name))
-            raise "attribute #{wattr_name} already declared" if wattr
-          else
-            wattr = wnode.create_wattr(wattr_name)
-          end
-        end
-        return
-      end
-
-      # Directive to specify wasm type of class attributes
-      # in case it's not the default type 
-      #
-      # Example
-      # wattr_type ptr: :I64, size: :I32
-      # ---------
-      # s(:send, nil, :wattr_type,
-      #   (hash
-      #     (pair
-      #       s(:sym, :ptr)
-      #       s(:sym, :I64))
-      #     (pair
-      #       s(:sym, :size)
-      #       s(:sym, :I32))   ))
-      #
-      if recv_node.nil? && method_name == :wattr_type
-        raise "wattr directives can only happen in class scope" \
-          unless wnode.in_class_scope?
-        hash_node = node.children.last
-        wattr_types = parse_type_args(hash_node, :attribute)
-        wattr_types.each do |name, wtype|
-          if (wattr = wnode.find_wattr(name))
-            logger.debug "Setting wattr #{name} type to #{wtype}"
-            wattr.wtype = WType.new(wtype)
-          else
-            raise "Unknown class attribute #{name} in #{wnode}"
-          end          
-        end
-        return
-      end
-
-      # Directive to inline WAT / Ruby code
-      # the wat entry is used when the Rlang code is
-      # comiled to WAT code. The Ruby entry is used 
-      # when the rlang code is simulated in plain Ruby
-      # **CAUTION** the inline code is supposed to always
-      # leave a value on the stack
-      # Example
-      # inline wat: '(call_indirect (type $insn_t) 
-      #                 (local.get $state) 
-      #                 (local.get $cf) 
-      #                 (local.get $opcodes) 
-      #                 (local.get $opcode) ;; instruction function pointer
-      #               )',
-      #        ruby: 'call_indirect(state, cf, opcodes, opcode)'
-      #
-      # ---------
-      # (send, nil, :inline,
-      #   (hash
-      #     (pair
-      #       (sym :wat)
-      #       (dstr
-      #         (str "(call_indirect (type $insn_t) \n")
-      #         (str "...")
-      #           ...))
-      #     (pair)
-      #       (sym :wtype)
-      #       (sym :I64)
-      #     (pair
-      #       (sym :ruby)
-      #       (str "call_indirect(state, cf, opcodes, opcode)"))
-      #  
-      if recv_node.nil? &&  method_name == :inline
-        raise "inline can only happen in a method body or at root" \
-          unless wnode.in_method_scope? || wnode.in_root_scope?
-        hash_node = node.children.last
-        raise "inline expects a hash argument (got #{hash_node.type}" \
-          unless hash_node.type == :hash
-
-        # Find the :wat entry in hash
-        logger.debug "Hash node: #{hash_node} "
-        wat_node = hash_node.children. \
-          find {|pair| sym_node, = *pair.children; sym_node.children.last == :wat}
-        raise "inline has no wat: hash entry" unless wat_node
-
-        # Find the :wtype entry in hash if any
-        wtype_node = hash_node.children. \
-          find {|pair| sym_node, = *pair.children; sym_node.children.last == :wtype}
-        if wtype_node
-          wtype = WType.new(wtype_node.children.last.children.last)
-        else
-          wtype = WType::DEFAULT
-        end
-
-        # Now extract the WAT code itself
-        raise "inline has no wat: hash entry" unless wat_node
-        wcode_node = wat_node.children.last
-        if wcode_node.type == :dstr
-          # iterate over str children
-          wat_code = wcode_node.children.collect {|n| n.children.last}.join('')
-        elsif wcode_node.type == :str
-          wat_code = wcode_node.children.last
-        else
-          raise "inline WAT code must be a string (got #{wcode_node})"
-        end
-        wn_inline = @wgenerator.inline(wnode, wat_code, wtype)
-        # Drop last evaluated result if asked to
-        @wgenerator.drop(wnode) unless keep_eval
-        return wn_inline
-      end
-
+      
       # Special case : DAta initializers
       #
       # Example (setting DAta address)
@@ -1176,7 +983,7 @@ module Rlang::Parser
       # it defaults to false
       if method_name == :cast_to
         class_name_node = node.children.last
-        raise "to method expects a symbol argument" unless class_name_node.type == :sym
+        raise "cast_to expects a symbol argument (got #{class_name_node}" unless class_name_node.type == :sym
         tgt_wtype = WType.new(class_name_node.children.first)
         logger.debug "in cast_to: target type #{tgt_wtype}"
 
@@ -1223,145 +1030,522 @@ module Rlang::Parser
         return wn_cast
       end
 
-      # New object instantiation
-      # This is class object instantiation. Statically 
-      # allocated though. So it can only happen in the
-      # class scope for a class variable or a constant
-      # Example
-      # self.new
-      # ---------
-      # (send
-      #   (self) :new) )
-      # 
-      # OR
-      # Header.new
-      # ---------
-      # (send
-      #   (const nil :Header) :new) )
-      if wnode.in_class_scope? && method_name == :new
-        if recv_node.type == :self
-          class_name = wnode.class_name
-        elsif recv_node.type == :const
-          class_name = recv_node.children.last
-        else
-          raise "Error: can only call new on self or class objects (got #{recv_node})"
-        end
-        logger.debug "Parsing #{class_name}.new..."
-        # This is class object instantiation. Statically 
-        # allocated though. So it can only happen in the
-        # class scope for a class variable or a constant
-
-        # Returns a wnode with a i32.const containing the address
-        wn_addr = @wgenerator.new(wnode, class_name)
-        return wn_addr
-      end
-
-      # Regular class Method call to self class
-      # or another class
-      # Example
-      # self.m_one_arg(arg1, 200)
-      # ---------
-      # (send
-      #   (self) :m_one_arg
-      #   (lvar :arg1)
-      #   (int 200)
-      # )
-      # OR
-      # Test.m_one_arg(arg1, 200)
-      # (send
-      #   (const nil :Test) :m_one_arg
-      #   (lvar :arg1)
-      #   (int 200)
-      # )
-      if wnode.in_class_method_scope? && (recv_node.type == :self || recv_node.type == :const)
-        logger.debug "Parsing class method call: #{class_name}::#{method_name}..."
-
-        if recv_node.type == :self
-          class_name = wnode.class_name
-        elsif recv_node.type == :const
-          class_name = recv_node.children.last
-        else
-          raise "Error: can only call method on self or class objects (got #{recv_node})"
-        end
-        raise "Class instantiation can only happen statically in class scope (got scope #{wnode})" \
-          if method_name == :new
-
-        wn_call = @wgenerator.call(wnode, class_name, method_name)
-        arg_nodes = node.children[2..-1]
-        arg_nodes.each { |node| parse_node(node, wn_call) }
-        # Drop last evaluated result if asked to
-        @wgenerator.drop(wnode) unless keep_eval
-        return wn_call
-      end
-
-      # If receiver not self or const then it could
-      # be an arithmetic or relational expression
-      # a method call on class "instance"
-      #
-      # Example for binary op
-      # 1 + 2
-      # ----------
-      # (send
-      #   (int 1) :+
-      #   (int 2)
-      # )
-      #
-      # Example unary op
-      # !(n==1)
-      # ----------
-      # (send
-      #   (begin
-      #     (send (lvar :n) :== (int 1))
-      #  ) :!)
-      #
-      # Example for method call on class instance
-      # @@cvar.x = 100
-      # ----------
-      # (send
-      #   (cvar :@@cvar) :x= (int 100)
-      # )
-      # TODO must guess type arg from operator type
-      logger.debug ">>> in expression section"
-      logger.debug "  recv_node: #{recv_node} type: #{recv_node.type}"
-
+      # A that stage it's a method call of some sort
+      # (call on class or instance)
       if ARITHMETIC_OPS.include?(method_name) ||
          RELATIONAL_OPS.include?(method_name) ||
          UNARY_OPS.include?(method_name)
-        wn_op = @wgenerator.operator(wnode, method_name)
-        wn_recv = parse_node(recv_node, wn_op)
-    
-        # now process the 2nd op arguments (there should
-        # be only one but do as if we had several
-        arg_nodes = node.children[2..-1]
-        raise "method #{method_name} got #{arg_nodes.count} arguments (expected 1)" \
-          unless arg_nodes.count <= 1
-        wn_args = arg_nodes.collect {|n| parse_node(n, wn_op)}
-        @wgenerator.operands(wn_op, wn_recv, wn_args)
-        logger.debug "  After type cast:  #{wn_op} wtype: #{wn_op.wtype}, op children types: #{wn_op.children.map(&:wtype)}"
-        # Drop last evaluated result if asked to
-        @wgenerator.drop(wnode) unless keep_eval
-        return wn_op
+        return parse_operator(node, wnode, keep_eval)
       else
-        # Parse receiver node and temporarily attach it
-        # to parent wnode. It will later become the first
-        # argument of the method call by reparenting it
-        logger.debug "Parsing instance method call #{method_name}..."
-        wn_recv = parse_node(recv_node, wnode)
-        logger.debug "... on #{wn_recv}"
-        class_name = wn_recv.wtype.name
-        wn_call = @wgenerator.call(wnode, class_name, method_name)
-        wn_recv.reparent_to(wn_call)
-        # Grab all arguments and add them as child of the call node
-        arg_nodes = node.children[2..-1]
-        arg_nodes.each do |node| 
-          wn = parse_node(node, wn_call) 
-          logger.debug "...with arg #{wn}"
+        return parse_send_method_lookup(node, wnode, keep_eval)
+      end
+
+      raise "FATAL ERROR!! Unreachable point at end of parse_send (node: #{node})"
+    end
+
+    def parse_send_nil_receiver(node, wnode, keep_eval)
+      recv_node = node.children[0]
+      method_name = node.children[1]
+      raise "receiver should be nil here (got #{recv_node})" \
+        unless recv_node.nil?
+
+      if recv_node.nil? && method_name == :require
+        return parse_send_require(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? && method_name == :require_relative
+        return parse_send_require_relative(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? && method_name == :export
+        return parse_send_export(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? && method_name == :local
+        return parse_send_local(node, wnode, keep_eval)
+      end
+
+      if  recv_node.nil? && method_name == :arg
+        return parse_send_arg(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? && method_name == :result 
+        return parse_send_result(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? && method_name == :wattr
+        return parse_send_wattr(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? && method_name == :wattr_type
+        return parse_send_wattr_type(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? &&  method_name == :inline
+        return parse_send_inline(node, wnode, keep_eval)
+      end
+
+      # All other cases : it is a regular method call
+      return parse_send_method_lookup(node, wnode, keep_eval)
+    end
+
+    # Directive to require a file
+    # Example
+    # (send nil :require
+    #   (str "test5"))
+    def parse_send_require(node, wnode, keep_eval)
+      raise "require must be used at root level" \
+        unless wnode.in_root_scope?
+      file_node = node.children.last
+      raise "require only accepts a string argument (got #{file_node})" \
+        unless file_node.type == :str
+      parse_require(wnode, file_node.children.last)
+      return
+    end
+
+    # Directive to require_a file relative to
+    # current file
+    # Example
+    # (send nil :require_relative
+    #   (str "test5"))
+    def parse_send_require_relative(node, wnode, keep_eval)
+      raise "require_relative must be used at root level" \
+        unless wnode.in_root_scope?
+      file_node = node.children.last
+      raise "require only accepts a string argument (got #{file_node})" \
+        unless file_node.type == :str
+      parse_require_relative(wnode, file_node.children.last)
+      return
+    end
+
+    # Directive to declare the current method
+    # in the WASM exports
+    def parse_send_export(node, wnode, keep_eval)
+      raise "export must be used in class scope" unless wnode.in_class_scope?
+      @@export = true
+      return
+    end
+
+    # Directive to define local variable type
+    # this must be processed at compile time
+    # if method name is :local then it is
+    # a type definition for a local variable
+    # local :value, :I64
+    # ---------
+    # s(:send, nil, :local,
+    #  (hash
+    #     (pair
+    #       s(:sym, :value)
+    #       s(:sym, :I64))
+    # ))
+    def parse_send_local(node, wnode, keep_eval)
+      raise "local declaration can only be used in methods" \
+        unless wnode.in_method_scope?
+      hash_node = node.children.last
+      local_types = parse_type_args(hash_node, :local)
+      local_types.each do |name, wtype|
+        lvar = wnode.find_or_create_lvar(name)
+        raise "couldn't find or create local variable #{name}" unless lvar
+        lvar.wtype = WType.new(wtype)
+      end
+      return
+    end
+
+    # Directive to define method argument type
+    # this must be processed at compile time
+    # if method name is :arg then it is
+    # a type definition for a method argument
+    # arg value: :I64
+    # ---------
+    # s(:send, nil, :arg,
+    #  (hash
+    #     (pair
+    #       s(:sym, :value)
+    #       s(:sym, :I64))
+    # ))
+    def parse_send_arg(node, wnode, keep_eval)
+      raise "arg declaration can only be used in methods" \
+        unless wnode.in_method_scope?
+      hash_node = node.children.last
+      marg_types = parse_type_args(hash_node, :argument)
+      marg_types.each do |name, wtype|
+        marg = wnode.find_marg(name)
+        raise "couldn't find method argument #{name}" unless marg
+        marg.wtype = WType.new(wtype)
+      end
+      return
+    end
+
+    # result directive in method scope
+    # ======
+    # Directive to define method return type
+    # in the method itself
+    # this must be processed at compile time
+    # Supported types : :I32, :I64, :none 
+    # (:nil means no value is returned)
+    # 
+    # Example
+    # result :I64
+    # ---------
+    # s(:send, nil, :result,
+    #   s(:sym, :I64))
+    #
+    # result directive in class scope
+    # ======
+    # Directive to define method return type
+    # at the class level. This allows to declare
+    # a method type before the method is parsed
+    # this must be processed at compile time
+    # Supported types : :I32, :I64, :none 
+    # (:none means no value is returned)
+    #
+    # Example
+    # result :class_name, :method_name, :I64
+    # ---------
+    # s(:send, nil, :result,
+    #   s(:sym, :class_name),
+    #   s(:sym, :method_name),
+    #   s(:sym, :I64))
+    #
+    # if name starts with # it's a n instance method,
+    # otherwise a class method
+    def parse_send_result(node, wnode, keep_eval)
+      if wnode.in_method_scope?
+        result_type, = *node.children[2]
+        raise "result directive expects a symbol argument (got #{result_type})" \
+          unless result_type.is_a? Symbol
+        wnode.method_wnode.wtype = WType.new(result_type)
+        logger.debug "result_type #{result_type} updated for method #{wnode.method_wnode.method.inspect}"
+      elsif wnode.in_class_scope?
+        cn_name,  = *node.children[2]
+        mn_name,  = *node.children[3]
+        result_type, = *node.children[4]
+        method_type = (mn_name[0] == '#' ? :instance : :class)
+        (mwn = wnode.find_or_create_method(mn_name, cn_name, method_type)).wtype = WType.new(result_type)
+        logger.debug "result_type #{mwn.wtype} for method #{mwn.name}"
+      else
+        raise "result declaration not supported #{wn.scope} scope"
+      end
+      return
+    end
+
+    # Directive to define class attributes. This defines
+    # a list of getters and setters and access them in
+    # memory with an offset from the base address given as
+    # an argument.
+    #
+    # Example
+    # wattr :ptr, :size
+    # ---------
+    # s(:send, nil, :wattr,
+    #   s(:sym, :ptr),
+    #   s(:sym, :size))
+    def parse_send_wattr(node, wnode, keep_eval)
+      raise "wattr directives can only happen in class scope" \
+        unless wnode.in_class_scope?
+      wattr_nodes = node.children[2..-1]
+      wattr_nodes.each do |wan|
+        logger.debug "processing wattr node #{wan}"
+        raise "attribute name must be a symbol (got #{wan})" unless wan.type == :sym
+        wattr_name = wan.children.last
+        if (wattr = wnode.find_wattr(wattr_name))
+          raise "attribute #{wattr_name} already declared" if wattr
+        else
+          wattr = wnode.create_wattr(wattr_name)
         end
-        logger.debug "Resulting in call node #{wn_call}"
-        # Drop last evaluated result if asked to
-        @wgenerator.drop(wnode) unless keep_eval
+      end
+      return
+    end
+
+    # Directive to specify wasm type of class attributes
+    # in case it's not the default type 
+    #
+    # Example
+    # wattr_type ptr: :I64, size: :I32
+    # ---------
+    # s(:send, nil, :wattr_type,
+    #   (hash
+    #     (pair
+    #       s(:sym, :ptr)
+    #       s(:sym, :I64))
+    #     (pair
+    #       s(:sym, :size)
+    #       s(:sym, :I32))   ))
+    #
+    def parse_send_wattr_type(node, wnode, keep_eval)
+      raise "wattr directives can only happen in class scope" \
+        unless wnode.in_class_scope?
+      hash_node = node.children.last
+      wattr_types = parse_type_args(hash_node, :attribute)
+      wattr_types.each do |name, wtype|
+        if (wattr = wnode.find_wattr(name))
+          logger.debug "Setting wattr #{name} type to #{wtype}"
+          wattr.wtype = WType.new(wtype)
+        else
+          raise "Unknown class attribute #{name} in #{wnode}"
+        end          
+      end
+      return
+    end
+
+    # Directive to inline WAT / Ruby code
+    # the wat entry is used when the Rlang code is
+    # comiled to WAT code. The Ruby entry is used 
+    # when the rlang code is simulated in plain Ruby
+    # **CAUTION** the inline code is supposed to always
+    # leave a value on the stack
+    # Example
+    # inline wat: '(call_indirect (type $insn_t) 
+    #                 (local.get $state) 
+    #                 (local.get $cf) 
+    #                 (local.get $opcodes) 
+    #                 (local.get $opcode) ;; instruction function pointer
+    #               )',
+    #        ruby: 'call_indirect(state, cf, opcodes, opcode)'
+    #
+    # ---------
+    # (send, nil, :inline,
+    #   (hash
+    #     (pair
+    #       (sym :wat)
+    #       (dstr
+    #         (str "(call_indirect (type $insn_t) \n")
+    #         (str "...")
+    #           ...))
+    #     (pair)
+    #       (sym :wtype)
+    #       (sym :I64)
+    #     (pair
+    #       (sym :ruby)
+    #       (str "call_indirect(state, cf, opcodes, opcode)"))
+    #  
+    def parse_send_inline(node, wnode, keep_eval)
+      raise "inline can only happen in a method body or at root" \
+        unless wnode.in_method_scope? || wnode.in_root_scope?
+      hash_node = node.children.last
+      raise "inline expects a hash argument (got #{hash_node.type}" \
+        unless hash_node.type == :hash
+
+      # Find the :wat entry in hash
+      logger.debug "Hash node: #{hash_node} "
+      wat_node = hash_node.children. \
+        find {|pair| sym_node, = *pair.children; sym_node.children.last == :wat}
+      raise "inline has no wat: hash entry" unless wat_node
+
+      # Find the :wtype entry in hash if any
+      wtype_node = hash_node.children. \
+        find {|pair| sym_node, = *pair.children; sym_node.children.last == :wtype}
+      if wtype_node
+        wtype = WType.new(wtype_node.children.last.children.last)
+      else
+        wtype = WType::DEFAULT
+      end
+
+      # Now extract the WAT code itself
+      raise "inline has no wat: hash entry" unless wat_node
+      wcode_node = wat_node.children.last
+      if wcode_node.type == :dstr
+        # iterate over str children
+        wat_code = wcode_node.children.collect {|n| n.children.last}.join('')
+      elsif wcode_node.type == :str
+        wat_code = wcode_node.children.last
+      else
+        raise "inline WAT code must be a string (got #{wcode_node})"
+      end
+      wn_inline = @wgenerator.inline(wnode, wat_code, wtype)
+      # Drop last evaluated result if asked to
+      @wgenerator.drop(wnode) unless keep_eval
+      return wn_inline
+    end
+
+    # If receiver not self or const then it could
+    # be an arithmetic or relational expression
+    # a method call on class "instance"
+    #
+    # Example for binary op
+    # 1 + 2
+    # ----------
+    # (send
+    #   (int 1) :+
+    #   (int 2)
+    # )
+    #
+    # Example unary op
+    # !(n==1)
+    # ----------
+    # (send
+    #   (begin
+    #     (send (lvar :n) :== (int 1))
+    #  ) :!)
+    #
+    def parse_operator(node, wnode, keep_eval)
+      recv_node = node.children[0]
+      operator = node.children[1]
+      wn_op = @wgenerator.operator(wnode, operator)
+      wn_recv = parse_node(recv_node, wn_op, true)
+      # now process the 2nd op arguments (there should
+      # be only one but do as if we had several
+      arg_nodes = node.children[2..-1]
+      raise "method #{operator} got #{arg_nodes.count} arguments (expected 0 or 1)" \
+        unless arg_nodes.count <= 1
+      wn_args = arg_nodes.collect {|n| parse_node(n, wn_op, true)}
+      @wgenerator.operands(wn_op, wn_recv, wn_args)
+      logger.debug "  After type cast:  #{wn_op} wtype: #{wn_op.wtype}, op children types: #{wn_op.children.map(&:wtype)}"
+      # Drop last evaluated result if asked to
+      @wgenerator.drop(wnode) unless keep_eval
+      return wn_op
+    end
+
+    # Method lookup
+    # In the example below mem_size wasn' t 
+    # recognized as a local var because it was not 
+    # assigned a value before. It's recognized as
+    # a tentative method call
+    # Example
+    #  some_var = mem_size + 10
+    # ------
+    # (send
+    #   (send nil :mem_size) :+
+    #   (int 10))
+    #  
+    #
+    # Example for method call on class instance
+    # @@cvar.x = 100
+    # ----------
+    # (send
+    #   (cvar :@@cvar) :x= (int 100)
+    # )
+    # TODO must guess type arg from operator type
+    def parse_send_method_lookup(node, wnode, keep_eval)
+      recv_node = node.children[0]
+      method_name = node.children[1]
+      if wnode.in_class_scope? || wnode.in_class_method_scope?
+        if recv_node.nil? || recv_node.type == :self 
+          return parse_send_class_method_call(node, wnode, keep_eval)
+        elsif recv_node.type == :const
+          const_name = recv_node.children.last
+          # if this is a Constant, not a class
+          # then it's actually an instance method call
+          if wnode.find_const(const_name)
+            return parse_send_instance_method_call(node, wnode, keep_eval)
+          else
+            return parse_send_class_method_call(node, wnode, keep_eval)
+          end
+        else
+          return parse_send_instance_method_call(node, wnode, keep_eval)
+        end
+      elsif wnode.in_instance_method_scope?
+        if recv_node&.type == :const
+          const_name = recv_node.children.last
+          # if this is a Constant, not a class
+          # then it's actually an instance method call
+          if wnode.find_const(const_name)
+            return parse_send_instance_method_call(node, wnode, keep_eval)
+          else
+            return parse_send_class_method_call(node, wnode, keep_eval)
+          end
+        else
+          return parse_send_instance_method_call(node, wnode, keep_eval)
+        end
+      else
+        raise "Don't know how to call method in scope #{wnode.scope} from node #{recv_node}"
+      end
+    end
+
+    # Regular class Method call to self class
+    # or another class
+    # Example
+    # self.m_one_arg(arg1, 200)
+    # ---------
+    # (send
+    #   (self) :m_one_arg
+    #   (lvar :arg1)
+    #   (int 200)
+    # )
+    # OR
+    # Test.m_one_arg(arg1, 200)
+    # (send
+    #   (const nil :Test) :m_one_arg
+    #   (lvar :arg1)
+    #   (int 200)
+    # )
+    #
+    # OR New object instantiation
+    # This is class object instantiation. Statically 
+    # allocated though. So it can only happen in the
+    # class scope for a class variable or a constant
+    # Example
+    # self.new
+    # ---------
+    # (send
+    #   (self) :new) )
+    # 
+    # OR
+    # Header.new
+    # ---------
+    # (send
+    #   (const nil :Header) :new) )
+    #
+    def parse_send_class_method_call(node, wnode, keep_eval)
+      logger.debug "Parsing class method call:..."
+      recv_node = node.children[0]
+      method_name = node.children[1]
+      if recv_node.nil? || recv_node.type == :self
+        class_name = wnode.class_name
+      elsif recv_node.type == :const
+        class_name = recv_node.children.last
+      else
+        raise "Can only call method class on self or class objects (got #{recv_node} in node #{node})"
+      end
+      logger.debug "...#{class_name}::#{method_name}"
+      if method_name == :new
+        raise "Cannot instantiate object in scope #{wnode.scope} on #{node}" \
+         unless wnode.in_class_scope?
+        # This is class object instantiation. Statically 
+        # allocated though. So it can only happen in the
+        # class scope for a class variable or a constant
+        # Returns a wnode with a i32.const containing the address
+        wn_addr = @wgenerator.new(wnode, class_name)
+        return wn_addr
+      else
+        wn_call = @wgenerator.call(wnode, class_name, method_name, :class)
+        arg_nodes = node.children[2..-1]
+        arg_nodes.each { |node| parse_node(node, wn_call) }
+        # Drop last evaluated result if asked to or if
+        # the method called doesn't return any value
+        @wgenerator.drop(wnode) unless (keep_eval || wn_call.wtype.blank?)
         return wn_call
       end
+      raise "FATAL ERROR!! Unreachable point at end of parse_send_class_method_call (node: #{node})"
+    end
+
+    def parse_send_instance_method_call(node, wnode, keep_eval)
+      recv_node = node.children[0]
+      method_name = node.children[1]
+      # Parse receiver node and temporarily attach it
+      # to parent wnode. It will later become the first
+      # argument of the method call by reparenting it
+      logger.debug "Parsing instance method call #{method_name}..."
+      # parse the receiver node
+      # if nil it means self
+      wn_recv = recv_node.nil? ? parse_self(recv_node, wnode) : parse_node(recv_node, wnode)
+      logger.debug "... on #{wn_recv}"
+      class_name = wn_recv.wtype.name
+
+      wn_call = @wgenerator.call(wnode, class_name, method_name, :instance)
+      wn_recv.reparent_to(wn_call) if wn_recv
+
+      # Grab all arguments and add them as child of the call node
+      arg_nodes = node.children[2..-1]
+      arg_nodes.each do |node| 
+        wn = parse_node(node, wn_call) 
+        logger.debug "...with arg #{wn}"
+      end
+      logger.debug "Resulting in call node #{wn_call}"
+      # Drop last evaluated result if asked to or if
+      # the method called doesn't return any value
+      @wgenerator.drop(wnode) unless (keep_eval || wn_call.wtype.blank?)
+      return wn_call
     end
 
     def parse_type_args(hash_node, entity)
@@ -1600,7 +1784,7 @@ module Rlang::Parser
 
       # Parse the body of the while block and 
       # do not keep the last evaluated expression
-      parse_node(body_node, wn_body, false )
+      parse_node(body_node, wn_body, false)
       @wgenerator.while_end(wn_body)
       return wn_while
     end
@@ -1638,7 +1822,7 @@ module Rlang::Parser
       # operator wnode
       wn_cond1 = parse_node(cond1_node, wn_op)
       wn_cond2 = parse_node(cond2_node, wn_op)
-      wn_op = @wgenerator.operands(wn_op, wn_cond1, [wn_cond2])
+      @wgenerator.operands(wn_op, wn_cond1, [wn_cond2])
       # Drop last evaluated result if asked to
       @wgenerator.drop(wnode) unless keep_eval
       return wn_op

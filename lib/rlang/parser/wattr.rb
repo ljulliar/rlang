@@ -20,14 +20,12 @@ module Rlang::Parser
       # method objects (with default WType - wattr_type
       # directives might later change this wtype)
       # Don't generate WAT code yet
-      @getter = @class_wnode.create_method(name)
+      @getter = @class_wnode.create_method(self.getter_name, nil, wtype, :instance)
       @getter.instance!
-      @getter.wtype = wtype
       logger.debug "Getter created: #{@getter.inspect}"
 
-      @setter = @class_wnode.create_method(:"#{name}=")
+      @setter = @class_wnode.create_method(self.setter_name, nil, wtype, :instance)
       @setter.instance!
-      @setter.wtype = wtype
       logger.debug "Setter created: #{@setter.inspect}"
 
       logger.debug "Class attribute #{name} created"
@@ -52,7 +50,14 @@ module Rlang::Parser
     def wasm_name
       "$#{@name}"
     end
+    
+    def getter_name
+      @name
+    end
 
+    def setter_name
+      "#{@name}=".to_sym
+    end
     def wasm_type
       @wtype.wasm_type
     end

@@ -32,6 +32,14 @@ module Rlang::Parser
       @instance
     end
 
+    def class!
+      @instance = false
+    end
+
+    def class?
+      !@instance
+    end
+
     def wtype=(wtype)
       @wtype = wtype
       logger.debug "Method wtype updated: #{self.inspect}"

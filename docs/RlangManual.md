@@ -4,13 +4,13 @@ Rlang is a subset of the Ruby language that is meant to provide a certain level 
 
 Ruby programmers will feel at home with Rlang and non Ruby programmers will find it useful to generate efficient WebAssembly code from a language that is much easier to use.
 
-Still, to make this Ruby to WebAssembly compilation possible a number of trade-offs had to be made. The goal of this document is to explain what the language of the Rlang features are and how it differs from plain Ruby.
+Still, to make this Ruby to WebAssembly compilation possible a number of trade-offs had to be made. The goal of this document is to explain the features of Rlang are how it differs from plain Ruby.
 
 ## The Rlang object model
 
 In Rlang you can define classes and those classes can be instantiated but *only* statically not dynamically. Supporting dynamic object allocation would more or less mean that Rlang becomes a Ruby virtual machine and this is not the intent. What the intent is with Rlang is to provide you with a language that can assist you in developing such a Virtual Machine for instance ;-)
 
-One of the consequence of this for instance is that you can statically instantiate a new object in the body of a class not in a method. In other words objects can be instantiated at compile time not at runtime.
+One of the consequence of this for instance is that you can statically instantiate a new object in the body of a class not in a method. In other words objects can be instantiated at compile time not at runtime (note: this may change in a future version)
 
 ## What Rlang does
 
@@ -25,7 +25,7 @@ Rlang provides:
 * Arithmetic, relational and logical operators
 * WebAssembly source code (WAT) inlining
 * Requiring other Rlang or WAT files
-* A Rlang library (written in Rlang of course) that you can use in your own code
+* A Rlang library (written in Rlang of course) that you can reuse in your own WebAssembly module
 
 Here is a sample of Rlang code to whet your appetite:
 
@@ -119,7 +119,9 @@ end
 ```
 
 ## Object instantiation
-In Rlang objects must be instantiated at compile time not at runtime. As a result of this, all object instantiation must happen in the body of a class not in a method. You have already seen an example of such an object instantiation in the previous example with `Square.new`.
+In the current version of Rlang objects can only be instantiated at compile time not at runtime. As a result of this, all object instantiation must happen in the body of a class not in the body of a method. You have already seen an example of such an object instantiation in the previous example with `Square.new` being instantiated and stored in the class variable `@@cvar`.
+
+Similarly you can also instantiate and store an object in a global variable.
 
 ## Methods
 Methods in Rlang are defined as you would normally do in Ruby by using. They can be either class or instance methods.
@@ -154,12 +156,14 @@ With a few exceptions (see the Conditional and Iteration Structures sections bel
 
 Rlang also gives you the ability to declare the return type of a method like this 
 ```ruby
-result class_name, method_name, wasm_type
+result :class_name, :method_name, :wasm_type
 ```
 
-This result directive must be used to instruct the compiler about the return type of a method if it has not seen it yet (e.g. the method definition is coming later in your source code). But keep in mind that this only needed when the method returns something different than the default type (`:I32`).
+This result directive must be used to instruct the compiler about the return type of a method if it has not seen it yet (e.g. the method definition is coming later in your source code). But keep in mind that this is only needed if the method returns something different than the default type (`:I32`).
 
-For an example see the [test_def_result_type_declaration.rb](https://github.com/ljulliar/rlang/blob/master/test/rlang_files/test_def_result_type_declaration.rb), a Rlang file that is part of the Rlang test suite.
+If `:method_name` symbol starts with a `#` it refers to an instance method. Without it it refers to a class method.
+
+For an example see the [test_def_result_type_declaration.rb](https://github.com/ljulliar/rlang/blob/master/test/rlang_test_files/test_def_result_type_declaration.rb), a Rlang file that is part of the Rlang test suite.
 
 ### Local variables
 Local variable used in a method body doesn't have to be declared. They are auto-vivified the first time you assign a value to it. In some cases though, you may have to use the `local` directive as in the example below to explicitely state the type of a local variable.
@@ -259,7 +263,7 @@ class TestB
 end
 ```
 
-## Booelans
+## Booleans
 Rlang the booleans `true` and `false`. You can use them in conditional statements like in the example below. As expected the `x` local variable equals would equal 10 when breaking from the loop
 
 ```ruby
@@ -321,9 +325,29 @@ Rlang supports the following Ruby iteration statements:
 
 Here is the list of operators supported by Rlang:
 
-* Arithmetic operators: +, -, *, /, %, &, |, ^, >>, <<
-* Relational operators: ==, !=, <, >, <=, >=
-* Logical operators: &&, ||, !
+* Arithmetic operators: `+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `>>`, `<<`
+* Relational operators: `==`, `!=`, `<`, `>`, `<=`, `>=`
+* Logical operators: `&&`, `||`, `!`
+
+### Arithmetics operators
+Arithmetics operators does the same as in plain Ruby. They apply to `:I32` and `:I64` types. They will apply equally to `:F32` and `:F64` when supported by Rlang
+
+### Relational operators
+Relational operators does the same as in plain Ruby. They apply to `:I32` and `:I64` types. They will apply equally to `:F32` and `:F64` when supported by Rlang
+
+All relational operators evaluate to a boolean value (see above) either `true` (value 1) or `false` (value 0)
+
+### Logical operators
+Logical (aka Boolean) operators `&&` (logical AND), `||` (logical OR) and `!` (logical NOT) acts as in plain Ruby.
+
+It's a Rlang best practice to apply logical operators to boolean values only (e.g. `true`, `false` or boolean values resulting from comparisons). However in Rlang all non zero value is equivalent to true so, like in C, you can mix and match both booleans and integer values although it is not recommended as it typically leads to very nasty bugs that are hard to spot.
+
+### Pointer Arithmetics
+With the ability to define classes with attributes and instantiate objects from those classes, comes the notion of pointer arithmetics. When a new object is instantiated in Ruby, it is assigned a unique object ID. Similaly in Rlang the statement `@@cvar = Square.new`, will instatiate a new object, allocate the space needed in the WebAssembly memory, return the address of this memory space and, in this particular case, store the address i a class variable. In other words, `@@cvar` is a pointer to the new object.
+
+With this we can start using pointer arithmetics like you would do in C. Supported operators are `+`, `-` as well as all relational operators `==`, `!=`, `<`, `>`, `<=`, `>=`. As an example the statement `@@cvar += 1` would result in @@cvar pointing to a memory address increased by the size of the Square object (here 8 bytes as Square has one `I64` attribute)
+
+You can see examples of pointer arithmetics are work in the memory allocator class (Malloc) provide in the Rlang library.
 
 ## Requiring files
 `require` and `require_relative` are supported by Rlang. It means that, like in plain Ruby, you can split your Rlang classes in distinct files, require them in a master file and compile this single master file.
@@ -360,6 +384,8 @@ Rlang comes with a library that provides a number of pre-defined classes and met
 require 'rlang/lib'
 ```
 
-For now, the Rlang library is very modest and only contains basic WebAssembly memory management functions like `Memory::size` and `Memory::grow`. Moe will come soon.
+For now, the Rlang library is very modest and only contains basic WebAssembly memory management functions like `Memory::size` and `Memory::grow` to mirror the WebAssembly functions of the same name.
+
+A basic dynamic memory allocator is also provided. It is shamelessly adapted from example provided in the famous Kernigan & Richie C book. Take a look at the [C version](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.c) and see how easy it is to adapt  [Malloc in Rlang](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb).
 
 That's it! Enjoy Rlang and, as always, feedback and contributions are welcome.

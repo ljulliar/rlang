@@ -6,7 +6,7 @@ class Test
   end
 
   export
-  def self.test_call_method(arg1)
+  def self.test_call_class_method(arg1)
     self.test_def_two_args(arg1, 200)
   end
 end

@@ -23,9 +23,12 @@ class WType
     F32: Type::F32
   }
 
-  # Type cast order in decreading order of precedence
-  CAST_PRECEDENCE = [:F64, :F32, :I64, :I32]
-
+  # Implicit Type cast order in decreasing order of precedence
+  # Class types have precedence over default integer type
+  # because of pointer arithmetics
+  # TODO: :Class should be inserted before WType::DEFAULT
+  CAST_PRECEDENCE = [:F64, :F32, :I64, :Class, :I32]
+  
   attr_reader :name
 
   def self.legit?(name)
@@ -36,13 +39,18 @@ class WType
     logger.debug "wtypes: #{wtypes}"
     # The compact below is to remove the nil 
     # when wtype is blank or class
-    leading_idx = wtypes.map { |wt| CAST_PRECEDENCE.index(wt.name) }.compact.each_with_index.min.last
+    leading_idx = wtypes.map {|wt| wt.class? ? :Class : wt.name}. \
+      map {|wtn| CAST_PRECEDENCE.index(wtn) }.compact.each_with_index.min.last
     wtypes[leading_idx]
   end
 
   def initialize(name)
     @name = name.to_sym
     raise "Invalid WType #{name.inspect}" unless self.valid?
+  end
+
+  def default?
+    @name == WType::DEFAULT.name
   end
 
   def valid?
@@ -58,6 +66,7 @@ class WType
   end
 
   def class?
+    # name starts with uppercase and is not a native type
     !self.native? && ('A'..'Z').include?(@name.to_s[0])
   end
 

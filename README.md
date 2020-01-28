@@ -28,7 +28,7 @@ To check that the installation went well, run `rlang --help` and see if the help
 ## The Rlang language
 Ruby features supported by Rlang are detailed in the [Rlang Manual](https://github.com/ljulliar/rlang/blob/master/docs/RlangManual.md)
 
-You can also look at the rlang test suite in [test/rlang_files](https://github.com/ljulliar/rlang/blob/master/test/rlang_files/) to get a flavor of the subset of Ruby currently supported.
+You can also look at the rlang test suite in [test/rlang_test_files](https://github.com/ljulliar/rlang/blob/master/test/rlang_test_files/) to get a flavor of the subset of Ruby currently supported.
 
 ## rlang compiler
 The Rlang compiler can be invoked through the `rlang` command. See the [Rlang Compiler Documentation](https://github.com/ljulliar/rlang/blob/master/docs/RlangCompiler.md) for more details about the command line options.

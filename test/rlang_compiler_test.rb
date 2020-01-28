@@ -6,7 +6,7 @@ require 'test_helper'
 
 class RlangCompilerTest < Minitest::Test
 
-  TEST_FILES_DIR = File.expand_path('../rlang_files', __FILE__)
+  TEST_FILES_DIR = File.expand_path('../rlang_test_files', __FILE__)
   TEST_FILE = File.join(TEST_FILES_DIR, 'test_def_one_arg.rb')
   LIB_DIR = File.expand_path('../../lib', __FILE__)
   RLANG = File.expand_path('../../bin/rlang', __FILE__)

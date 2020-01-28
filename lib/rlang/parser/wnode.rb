@@ -47,12 +47,11 @@ module Rlang::Parser
       br_if: 'br_if %{label}',
       br: 'br %{label}',
       inline: '%{code}',
-      wattr_reader: %q{func %{func_name} (param $_ptr_ i32) (result %{wtype})
-  (%{wtype}.load offset=%{offset} (local.get $_ptr_))},
-      wattr_writer: %q{func %{func_name} (param $_ptr_ i32) (param %{wattr_name} %{wtype}) (result %{wtype})
+      wattr_reader: %q{func %{func_name} (param $_self_ i32) (result %{wtype})
+  (%{wtype}.load offset=%{offset} (local.get $_self_))},
+      wattr_writer: %q{func %{func_name} (param $_self_ i32) (param %{wattr_name} %{wtype}) (result %{wtype})
   (local.get %{wattr_name})
-  (%{wtype}.store offset=%{offset} (local.get $_ptr_) (local.get %{wattr_name}))},
-  #(%{wtype}.load offset=%{offset} (local.get $_ptr_))},
+  (%{wtype}.store offset=%{offset} (local.get $_self_) (local.get %{wattr_name}))},
       class_size: %q{func %{func_name} (result %{wtype})
   (%{wtype}.const %{size})}
     }
@@ -171,7 +170,7 @@ module Rlang::Parser
 
     # Remove child to current node
     def remove_child(wnode)
-      #logger.debug "Removing #{wnode.object_id} from #{self.children.map(&:object_id)}"
+      logger.debug "Removing #{wnode.object_id} from #{self.children.map(&:object_id)}"
       wn = self.children.delete(wnode) do 
         logger.error "Couldn't find wnode ID #{wnode.object_id} (#{wnode})"
         raise
@@ -312,20 +311,23 @@ module Rlang::Parser
       self.method_wnode.margs.find { |ma| ma.name == name }
     end
 
-    def create_method(method_name, class_name=nil, wtype=WType::DEFAULT)
+    # method_type is either :instance or :class
+    def create_method(method_name, class_name, wtype, method_type)
       raise "MEthod already exists: #{m}" \
-        if (m = find_method(method_name, class_name))
+        if (m = find_method(method_name, class_name, method_type))
       if (cn = self.class_wnode)
         class_name ||= cn.klass_name
         cn.methods << (method = MEthod.new(method_name, class_name, wtype))
       else
         raise "No class wnode found to create method #{method_name}"
       end
+      method_type == :class ? method.class! : method.instance!
       logger.debug "Created MEthod: #{method.inspect}"
       method
     end
 
-    def find_method(method_name, class_name=nil)
+        # method_type is either :instance or :class
+    def find_method(method_name, class_name, method_type)
       if class_name
         class_wnode = find_class(class_name)
       else
@@ -333,7 +335,13 @@ module Rlang::Parser
       end
       raise "Couldn't find class wnode for class_name #{class_name}" unless class_wnode
       class_name = class_wnode.klass_name
-      method = class_wnode.methods.find { |m| m.name == method_name && m.class_name = class_name }
+      if method_type == :class
+        method = class_wnode.methods.find { |m| m.name == method_name && m.class_name == class_name && m.class? }
+      elsif method_type == :instance
+        method = class_wnode.methods.find { |m| m.name == method_name && m.class_name == class_name && m.instance? }
+      else
+        raise "Unknown method type : #{method_type.inspect}"
+      end
       if method
         logger.debug "Found MEthod: #{method.inspect}"
       else
@@ -342,8 +350,9 @@ module Rlang::Parser
       method
     end
 
-    def find_or_create_method(method_name, class_name=nil)
-      self.find_method(method_name, class_name) || self.create_method(method_name, class_name)
+    def find_or_create_method(method_name, class_name=nil, method_type=:class)
+      self.find_method(method_name, class_name, method_type) || \
+      self.create_method(method_name, class_name, WType::DEFAULT, method_type)
     end
 
     # Find block wnode up the tree
