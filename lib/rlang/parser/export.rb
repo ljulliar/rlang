@@ -3,17 +3,19 @@ require_relative './ext/type'
 module Rlang::Parser
   class Export
     @@exports = []
-    TMPL = '(export  "%s" (func %s))' 
-    attr_reader :method
+    attr_reader :object
     
-    def initialize(method)
-      @method = method
+    # Object can be either a method object or a global object
+    def initialize(object)
+      @object = object
       @@exports << self
     end
 
+    # Export Rlang funcs, etc... grouping them
+    # by object type for Wasm code readability
     def self.transpile
-      @@exports.collect do |export|
-        TMPL % [export.method.export_name, export.method.wasm_name]
+      @@exports.sort_by {|e| e.object.class.to_s}.collect do |export|
+        export.object.export_wasm_code
       end.join("\n")
     end
   end

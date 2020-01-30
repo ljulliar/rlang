@@ -68,5 +68,9 @@ module Rlang::Parser
     def export!
       Export.new(self)
     end
+
+    def export_wasm_code
+      '(export  "%s" (func %s))' % [self.export_name, self.wasm_name]
+    end
   end
 end

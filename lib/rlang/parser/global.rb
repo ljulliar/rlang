@@ -29,11 +29,23 @@ module Rlang::Parser
     end
 
     def wasm_name
-      "$#{@class_name}::#{@name}"
+      @name
     end
 
     def wasm_type
       @wtype.wasm_type
+    end
+
+    def export_name
+      @name
+    end
+
+    def export!
+      Export.new(self)
+    end
+
+    def export_wasm_code
+      '(export  "%s" (global %s (mut %s)))' % [self.export_name, self.wasm_name, self.wtype.wasm_type]
     end
 
     def self.transpile
@@ -41,10 +53,10 @@ module Rlang::Parser
       @@globals.each do |g|
         if g.mutable?
           output << '(global %{name} (mut %{type}) (%{type}.const %{value}))' \
-                    % {name: g.name, type: g.wtype.wasm_type, value: g.value}
+                    % {name: g.wasm_name, type: g.wtype.wasm_type, value: g.value}
         else
           output << '(global %{name} %{type} (%{type}.const %{value}))' \
-                    % {name: g.name, type: g.wtype.wasm_type, value: g.value}
+                    % {name: g.wasm_name, type: g.wtype.wasm_type, value: g.value}
         end
       end
       output.join("\n")

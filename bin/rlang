@@ -67,6 +67,10 @@ options:
     options[:module] = name
   end
 
+  opts.on("-x", "--export-all", "Export all Web Assembly functions and globals") do |v|
+    options[:export_all] = true
+  end
+
   opts.on("-m", "--memory MIN[,MAX]", "WASM Memory size allocated in pages (MIN default is 4)") do |sizes|
     options[:memory_min], options[:memory_max] = sizes.split(',')
   end
@@ -123,6 +127,7 @@ if options[:wat] || options[:wasm]
   parser = Rlang::Parser::Parser.new(nil)
   parser.config[:LOAD_PATH] = options[:load_path]
   parser.config[:__FILE__] = File.expand_path(ARGV[0])
+  parser.config[:export_all] = options[:export_all]
   wg = Rlang::Parser::WGenerator.new(parser)
   parser.wgenerator = wg
   parser.parse_file(File.expand_path(ARGV[0]))

@@ -450,6 +450,8 @@ module Rlang::Parser
             # first gvar occurence
             # type cast the gvar to the wtype of the expression
             gvar = Global.new(gv_name)
+            # Do not export global for now
+            #gvar.export! if self.config[:export_all]
             wn_gvasgn = @wgenerator.gvasgn(wnode, gvar)
             wn_exp = parse_node(exp_node, wn_gvasgn)
             gvar.wtype = wn_exp.wtype
@@ -485,6 +487,8 @@ module Rlang::Parser
           unless wn_exp.const?
         wnode.remove_child(wn_exp)
         gvar = Global.new(gv_name, wn_exp.wtype, wn_exp.wargs[:value])
+        # Do not export global for now
+        #gvar.export! if self.config[:export_all]
       end
     end
 
@@ -727,7 +731,7 @@ module Rlang::Parser
 
       # create corresponding func node
       method = wnode.find_or_create_method(method_name, nil, :class)
-      method.export! if @@export
+      method.export! if (@@export || self.config[:export_all])
       logger.debug "Method object : #{method.inspect}"
       wn_method = @wgenerator.class_method(wnode, method)
       # collect method arguments
@@ -775,7 +779,7 @@ module Rlang::Parser
 
       # create corresponding func node
       method = wnode.find_or_create_method(method_name, nil, :instance)
-      method.export! if @@export
+      method.export! if (@@export || self.config[:export_all])
       logger.debug "Method object : #{method.inspect}"
       wn_method = @wgenerator.instance_method(wnode, method)
       # add a receiver argument
@@ -1252,6 +1256,8 @@ module Rlang::Parser
           raise "attribute #{wattr_name} already declared" if wattr
         else
           wattr = wnode.create_wattr(wattr_name)
+          wattr.getter.export! if (@@export || self.config[:export_all])
+          wattr.setter.export! if (@@export || self.config[:export_all])
         end
       end
       return
@@ -1418,7 +1424,7 @@ module Rlang::Parser
     # TODO must guess type arg from operator type
     def parse_send_method_lookup(node, wnode, keep_eval)
       recv_node = node.children[0]
-      method_name = node.children[1]
+      #method_name = node.children[1]
       if wnode.in_class_scope? || wnode.in_class_method_scope?
         if recv_node.nil? || recv_node.type == :self 
           return parse_send_class_method_call(node, wnode, keep_eval)
