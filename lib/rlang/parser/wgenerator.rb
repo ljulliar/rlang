@@ -77,11 +77,15 @@ module Rlang::Parser
     end
 
     def klass(wnode, klass_name)
-      wn = WNode.new(:class, wnode)
-      wn.class_name = klass_name
-      wn.wtype = WType.new(wn.class_name)
-      WNode.root.class_wnodes << wn
-      wn
+      # First see if that class already exist
+      # If not create it.
+      unless (cwn = wnode.find_class(klass_name))
+        cwn = WNode.new(:class, wnode)
+        cwn.class_name = klass_name
+        cwn.wtype = WType.new(cwn.class_name)
+        WNode.root.class_wnodes << cwn
+      end
+      cwn
     end
 
     def attributes(wnode)
