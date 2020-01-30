@@ -1,4 +1,4 @@
-require 'rlang/lib'
+require 'rlang/lib/memory'
 
 class Test
   export

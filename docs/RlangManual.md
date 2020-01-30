@@ -386,4 +386,6 @@ require 'rlang/lib'
 
 For now, the Rlang library is very modest and only contains basic WebAssembly memory management functions like `Memory::size` and `Memory::grow` to mirror the WebAssembly functions of the same name.
 
+A basic dynamic memory allocator is also provided. It is shamelessly adapted from example provided in the famous Kernigan & Richie C book. Take a look at the [C version](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.c) and see how easy it is to adapt  [Malloc in Rlang](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb).
+
 That's it! Enjoy Rlang and, as always, feedback and contributions are welcome.

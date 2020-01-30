@@ -6,4 +6,5 @@
 
 require_relative './lib/type'
 require_relative './lib/memory'
+require_relative './lib/unistd'
 require_relative './lib/malloc'
