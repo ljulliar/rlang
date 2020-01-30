@@ -20,7 +20,7 @@ Rlang is not yet published as a gem. This will come soon. In the meantime, clone
 
 ```
 $ gem build rlang.gemspec
-$ gem install --local rlang-0.2.0.gem
+$ gem install --local rlang-x.y.z.gem
 ```
 
 To check that the installation went well, run `rlang --help` and see if the help message displays correctly
