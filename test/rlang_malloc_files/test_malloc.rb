@@ -6,9 +6,9 @@
 # malloc and then instantiate it int he Wasmer 
 # run time
 
-# These global variables are used the dynamic memory
-# So pick some values for the purpose of testing the 
-# code
+# These 3 global variables below are used by the
+# dynamic memory allocator. They must however be 
+# defined in the end applications.
 
 # Heap base address (make sure it's aligned on 
 # an address compatible with the most restrictive data type
