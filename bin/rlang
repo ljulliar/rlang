@@ -67,7 +67,7 @@ options:
     options[:module] = name
   end
 
-  opts.on("-x", "--export-all", "Export all Web Assembly functions and globals") do |v|
+  opts.on("-x", "--export-all", "Export all Web Assembly functions") do |v|
     options[:export_all] = true
   end
 
