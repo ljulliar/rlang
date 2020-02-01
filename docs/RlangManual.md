@@ -21,6 +21,7 @@ Rlang provides:
 * Integers and booleans 
 * Constants
 * Global variables
+* Static Data
 * Control constructs (if, while, until, break, next,...)
 * Arithmetic, relational and logical operators
 * WebAssembly source code (WAT) inlining
@@ -290,6 +291,31 @@ class TestB
   end
 end
 ```
+## Static Data
+WebAssembly allows for the definition of static data stored the WebAssembly memory. Rlang provides the ability to both define the value of static data and reference this data in your Rlang code.
+
+You can define static data by using the **DAta** class. Note that the upper case **A** in DAta is not a typo. The Data (with lower case a) class cannot be used as it is already defined by Ruby.
+
+Let's see a few examples of how to define and reference static data:
+
+```ruby
+# Where to implant the data in memory
+# Here we start at address 2048 in memory
+DAta.current_address = 2048
+# a long (I32) integer (4 bytes in memory)
+DAta[:my_integer] = 16384
+# a null terminated string (13 bytes)
+DAta[:my_string] = "Hello World!\00"
+# Align to the next multiple of 4 in memory
+DAta.align(4)
+# a series of four I32 integers followed by a fifth
+# integer that points to the address of :my_first_string
+DAta[:my_series] = [1, 2, 3, 4, Data[:my_first_string]]
+```
+The last example shows how to reference an existing piece of static data using  `DAta[:label]` where `:label` is the label you used in the first place to define your data. Data reference can either be used in static data definition or anywhere in the Rlang code.
+
+Also note that data are implanted in memory in sequential order. In the example above `:my_integer` is stored at address 2048 to 2051 (4 bytes), `:my_string` goes from 2052 to 2064 (13 bytes). Without the `DAta.align(4)` directive the next integer from `:my_series` would use bytes 2065 to 2068. Here it will actually use bytes 2068 to 2071 and the 3 bytes at address 2065 to 2067 will actually be unused.
+
 
 ## Conditional statements
 Rlang supports the following Ruby conditional statements:
