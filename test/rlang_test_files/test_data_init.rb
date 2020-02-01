@@ -1,4 +1,4 @@
-DAta.current_address = 0
+DAta.address = 0
 DAta[:a_string] = "My\tLittle\tRlang\x00"
 DAta.align(4)
 DAta[:an_I64] = 32_000_000_000.to_I64

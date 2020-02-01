@@ -883,10 +883,10 @@ module Rlang::Parser
       # Special case : DAta initializers
       #
       # Example (setting DAta address)
-      # DAta.current_address = 0
+      # DAta.address = 0
       # ---------
       # (send
-      #   (const nil :DAta) :current_address=
+      #   (const nil :DAta) :address=
       #   (int 0))
       #
       # Example (setting DAta alignment)
@@ -950,10 +950,10 @@ module Rlang::Parser
 
       if recv_node.type == :const  && recv_node.children.last == :DAta
         case method_name
-        when :current_address=
+        when :address=
           value_node = node.children[2]
           raise "DAta address must be an integer" unless value_node.type == :int
-          DAta.current_address = value_node.children.last
+          DAta.address = value_node.children.last
         when :align
           value_node = node.children[2]
           raise "DAta alignment argument must be an integer" unless value_node.type == :int

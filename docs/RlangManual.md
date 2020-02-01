@@ -301,7 +301,7 @@ Let's see a few examples of how to define and reference static data:
 ```ruby
 # Where to implant the data in memory
 # Here we start at address 2048 in memory
-DAta.current_address = 2048
+DAta.address = 2048
 # a long (I32) integer (4 bytes in memory)
 DAta[:my_integer] = 16384
 # a null terminated string (13 bytes)

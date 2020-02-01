@@ -65,7 +65,7 @@ class DAta
     end
   end
 
-  def self.current_address=(address)
+  def self.address=(address)
     @@current_address = address
   end
 

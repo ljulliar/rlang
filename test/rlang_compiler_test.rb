@@ -20,14 +20,14 @@ class RlangCompilerTest < Minitest::Test
   end
 
   def test_rlang_ast
-    assert system("ruby -I #{LIB_DIR} #{RLANG} --ast #{TEST_FILE} > /dev/null")
-    assert system("ruby -I #{LIB_DIR} #{RLANG} --ast #{TEST_FILE} -o #{@tf_path}")
+    assert system("ruby -I#{LIB_DIR} -- #{RLANG} --ast #{TEST_FILE} > /dev/null")
+    assert system("ruby -I#{LIB_DIR} -- #{RLANG} --ast #{TEST_FILE} -o #{@tf_path}")
     assert File.exist?(@tf_path)
     assert File.size(@tf_path) > 0
   end
 
   def test_rlang_wat
-    assert system("ruby -I #{LIB_DIR} #{RLANG} --wat #{TEST_FILE} > /dev/null")
+    assert system("ruby -I#{LIB_DIR} -- #{RLANG} --wat #{TEST_FILE} > /dev/null")
     assert system("ruby -I#{LIB_DIR} -- #{RLANG} --wat #{TEST_FILE} -o #{@tf_path}")
     assert File.exist?(@tf_path)
     assert File.size(@tf_path) > 0
