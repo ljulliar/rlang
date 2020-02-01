@@ -4,7 +4,7 @@ Rlang is meant to create fast and uncluttered [WebAssembly](https://webassembly.
 
 Rlang actually two things: 1) a subset of the Ruby language and 2) a **compiler** transforming this Ruby subset in a valid, fully runnable and native WebAssembly module.
 
-Rlang can be seen as a foundational language that can help you quickly develop and debug high performance WebAssembly modules. For the rationale behind the creation of Rlang see [below](#why-rlang?).
+Rlang can be seen as a foundational language that can help you quickly develop and debug high performance WebAssembly modules. For the rationale behind the creation of Rlang see [below](#why-rlang).
 
 What you'll find in the current version is a first implementation of Rlang. It will improve over time, with more facilities and probably more Ruby features but always with the goal to generate crisp and uncluttered WAT code.
 
