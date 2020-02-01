@@ -2,9 +2,9 @@
 
 Rlang is meant to create fast and uncluttered [WebAssembly](https://webassembly.org) code from the comfort of the Ruby language.
 
-Rlang is not a new language and it is not intended to be a general purpose languange. It is actually two things: 1) a supported subset of the Ruby language and 2) a **compiler** transforming this Ruby subset in a valid, fully runnable and native WebAssembly module.
+Rlang actually two things: 1) a subset of the Ruby language and 2) a **compiler** transforming this Ruby subset in a valid, fully runnable and native WebAssembly module.
 
-Rlang can be seen as a foundational language that can help you quickly develop and debug high performance WebAssembly modules. For the rationale behind the creation of Rlang see below.
+Rlang can be seen as a foundational language that can help you quickly develop and debug high performance WebAssembly modules. For the rationale behind the creation of Rlang see [below](#why-rlang?).
 
 What you'll find in the current version is a first implementation of Rlang. It will improve over time, with more facilities and probably more Ruby features but always with the goal to generate crisp and uncluttered WAT code.
 
@@ -15,8 +15,12 @@ What you'll find in the current version is a first implementation of Rlang. It w
 
 
 ## Installing Rlang
-Rlang is not yet published as a gem. This will come soon. In the meantime, clone the Rlang git repo and run the following command:
+Rlang is available as a gem from rubygems.org. So simply run the following command to install it:
 
+```
+$ gem install rlang
+```
+Alternatively, if you clone this git repo and play with the Rlang source code you can generate your own local gem and install it like this:
 
 ```
 $ gem build rlang.gemspec
@@ -33,23 +37,25 @@ You can also look at the rlang test suite in [test/rlang_test_files](https://git
 ## rlang compiler
 The Rlang compiler can be invoked through the `rlang` command. See the [Rlang Compiler Documentation](https://github.com/ljulliar/rlang/blob/master/docs/RlangCompiler.md) for more details about the command line options.
 
-It is important to understand that Rlang is **NOT** a Ruby interpreter or a Ruby VM written in WebAssembly. It does actually statically compile the Rlang language to WebAssembly code.
-
+Keep in mind that Rlang is **NOT** a Ruby interpreter or a Ruby VM executing some kind of bytecode. It does actually statically **compile** the Rlang language to WebAssembly code pretty much like gcc or llvm compiles C/C++ code to machine assembly language.
 
 ## rlang simulator
 **COMING SOON**
 One of the big benefits of Rlang being a subset of the Ruby language is that you can actually run, test and debug your Rlang code as you would for normal Ruby code. This can be a big boost for your productivity.
 
 ## Why Rlang?
-This project was created out of the need to develop a Virtual Machine written in WebAssembly capable of interpreting the [Rubinius](https://github.com/rubinius/rubinius) bytecode. And yes, ultimately running a native Ruby VM in a browser :-)
+This project was created out of the need to develop a Virtual Machine written in WebAssembly capable of interpreting the [Rubinius](https://github.com/rubinius/rubinius) bytecode. And yes, ultimately run a native Ruby VM in a browser :-)
 
-After a first proof of concept written directly by hand in WebAssembly (WAT code) it became clear that writing a full fledged VM directly in WebAssembly was going to be tedious, complex and un-necessarily painful.
+After a first proof of concept written directly by hand in WebAssembly (WAT code) it became clear that writing a full fledged VM directly in WebAssembly was going to be tedious, complex and unnecessarily painful.
 
-Sure I could have written this VM in any of the language that can already be compiled directly to WebAssembly (C, C++, Rust, Go,...) but being fond of Ruby since 2000 I decided that I would go for a compiler capable of transforming a subset of the Ruby language directly into WebAssembly with a minimum overhead. So in a nutshell: the goal of Rlang is to let you develop efficient WebAssembly code with a reasonably high level of abstraction while keeping the generated WebAssembly code straightforward, meaning human readable.
+Sure I could have written this VM in any of the language that can already be compiled directly to WebAssembly (C, C++, Rust, Go,...) but being fond of Ruby since 2000 I decided that I would go for a compiler capable of transforming a subset of the Ruby language directly into WebAssembly with a minimum overhead. So in a nutshell: the goal of Rlang is to let you develop efficient WebAssembly code with a reasonably high level of abstraction while keeping the generated WebAssembly code straightforward and human readable.
+
+## Why the name Rlang?
+Yes I hear you: Rlang is already the name of the R language so why use that name and aren't introducing some confusion? Well for one I couldn't resist using that name to honor software engineering history (see below) and because, after all, the intersection between the Ruby/WebAssembly community and the R language community focused on data processing and machine learning must be quite small to say the least.
 
 The name **Rlang** itself is  a tribute to [Slang](http://wiki.squeak.org/squeak/slang), a subset of the Smalltalk language that can directly translate to C. It was [created in 1995] to bootstrap the development of the Squeak VM, an open-source Smalltalk programming system. I highly encourage anyone interested in the history and the technology of virtual machines to read the both the [Back to the future](http://www.vpri.org/pdf/tr1997001_backto.pdf) article and the legendary [Blue Book](http://stephane.ducasse.free.fr/FreeBooks/BlueBook/Bluebook.pdf). I would actually go as far as saying that you don't really know what (virtual) machines are until you have read this book :-)
 
 ## Credits
-A big thank to 
+A big thanks to:
 * [@whitequark](https://github.com/whitequark) for a fantastic [Ruby parser](https://github.com/whitequark/parser)
 * The [Wasmer](https://wasmer.io/) team as well as the author of the [Ruby Wasm extension of Wasmer](https://github.com/wasmerio/ruby-ext-wasm)
