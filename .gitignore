@@ -8,3 +8,5 @@
 /tmp/
 # added for rlang
 *.gem
+*~
+.rake_tasks
