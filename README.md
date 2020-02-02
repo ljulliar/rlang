@@ -23,11 +23,31 @@ $ gem install rlang
 Alternatively, if you clone this git repo and play with the Rlang source code you can generate your own local gem and install it like this:
 
 ```
+$ bundle install
 $ gem build rlang.gemspec
 $ gem install --local rlang-x.y.z.gem
 ```
 
-To check that the installation went well, run `rlang --help` and see if the help message displays correctly
+To check that the installation went well, run `rlang --help` and see if the help message displays correctly.
+
+## A Quick example
+An example is always worth a thousand words, so here is a quick example that'll show how to compile some Rang code and run it from your browser. Since Chrome, Chromium, Firefox and Safari all natively embed a WebAssembly runtime it is the easiest to test your WebAssembly code.
+
+Navigate to the Fibonacci directory in [examples/fib](https://github.com/ljulliar/rlang/blob/master/examples/fib/) and download the three files from this directory: fib.rb, index.html, server.rb. Alternatively you can git clone the repo and go directly in that directory.
+
+Open fib.rb with your favorite editor and see for yourself that it looks like Ruby code :-). Then from a shell session:
+
+```shell
+# Compile the fib.rb file to Wasm bytecode
+$ rlang --wasm -o ./fib.wasm ./fib.rb
+# Launch the mini http server
+$ ruby server.rb
+
+```
+Point your browser to `http://localhost:8080`, a simple page should display inviting you to type an integer value then click run to obtain the fibonacci term for this value.
+
+That was easy, right ?
+
 
 ## The Rlang language
 Ruby features supported by Rlang are detailed in the [Rlang Manual](https://github.com/ljulliar/rlang/blob/master/docs/RlangManual.md)
