@@ -1,0 +1,38 @@
+<!doctype html>
+
+<html>
+<head>
+  <script>
+    var importObject = {
+      host: {
+        print: function(arg) {
+          console.log(arg);
+        }
+      }
+    };
+    // Load the module using the newest Streaming API
+    WebAssembly.instantiateStreaming(fetch('/fib.wasm'), importObject)
+    .then(obj => {
+        // Add a listener to the button to execute the 
+        // Wasm function when the button is pressed.
+        var button = document.getElementById('run');
+        button.addEventListener('click', function() {
+          var n = +document.getElementById('n').value;
+          console.log(n);
+          var fib_n = obj.instance.exports.math_c_fib(n);
+          console.log(fib_n);
+          document.getElementById('fib_n').innerHTML = fib_n;
+        }, false);
+      }
+    );
+  </script>
+</head>
+<body>
+  <h1>Rlang test</h1>
+
+  <p>Fibonacci terms</p>
+  n = <input type="text" size=6 id="n" value=16>
+  <input type="button" id="run" value="Run"/>
+  <p id="fib_n">-</p>
+</body>
+</html>
