@@ -44,7 +44,7 @@ $ rlang --wasm -o ./fib.wasm ./fib.rb
 $ ruby server.rb
 
 ```
-Point your browser to [http://localhost:8080](http://localhost:8080), a simple page should display inviting you to type an integer value then click run to obtain the corresponding fibonacci.
+Point your browser to [http://localhost:8080](http://localhost:8080), a simple page should display inviting you to type an integer value then click run to obtain the corresponding fibonacci term.
 
 That was easy, right ?
 
