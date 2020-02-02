@@ -10,3 +10,4 @@
 *.gem
 *~
 .rake_tasks
+*.wasm
