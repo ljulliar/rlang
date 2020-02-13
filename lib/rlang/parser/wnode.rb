@@ -11,6 +11,7 @@ require_relative './cvar'
 require_relative './lvar'
 require_relative './wattr'
 require_relative './method'
+require_relative './klass'
 
 module Rlang::Parser
   class WNode
@@ -56,10 +57,9 @@ module Rlang::Parser
   (%{wtype}.const %{size})}
     }
 
-    attr_accessor :type, :wargs, :children, :parent, :comment, :lvars, :cvars, :margs,
-                  :consts, :methods, :method, :template, :keep_on_stack,
-                  :class_wnodes
-    attr_reader   :wtype, :label, :klass_name, :klass_size, :wattrs
+    attr_accessor :type, :wargs, :children, :parent, :comment, 
+     :method, :template, :keep_on_stack, :classes
+    attr_reader :wtype, :label, :klass
 
     @@label_index = 0
 
@@ -81,19 +81,13 @@ module Rlang::Parser
       @wtype = WType::DEFAULT
 
       # For root wnode
-      @class_wnodes = [] # wnodes of classes
+      @classes = [] # classes
 
       # For class wnode only
-      @klass_name = nil
-      @wattrs  = [] # class attributes
-      @cvars   = [] # class variables=
-      @consts  = [] # class constants
-      @methods = [] # methods
+      @klass = nil
 
       # For method wnode only
       @method = nil
-      @margs = []   # method args
-      @lvars = []   # local variables
       
       # For insn wnode with 
       # label (.e.g block, loop)
@@ -184,6 +178,7 @@ module Rlang::Parser
     # Reparent self node to another wnode
     def reparent_to(wnode)
       return if self.parent == wnode
+      logger.debug "Reparenting #{self.object_id} to #{wnode.object_id}"
       old_parent, new_parent = self.parent, wnode
       new_parent << self
       old_parent >> self if old_parent
@@ -197,36 +192,68 @@ module Rlang::Parser
       wn
     end
 
-    # Set this node class name
-    def class_name=(class_name)
-      @klass_name = class_name
+    def klass=(klass)
+      @klass = klass
+      @klass.wnode = self
+      WNode.root.classes << klass
     end
 
     # Find class name in this node and up the tree
     def class_name
-      (cn = self.class_wnode) ? cn.klass_name : nil
+      (cn = self.class_wnode) ? cn.klass.name : nil
     end
 
-    # Find class name in this node and up the tree
+    # Find class size in this wnode or up the tree
     def class_size
-      (cn = self.class_wnode) ? cn.wattrs.sum(&:size) : nil
+      (cn = self.class_wnode) ? cn.klass.size : nil
     end
 
-    # Find the class wnode matching with the given
-    # class name
-    def find_class(class_name=nil)
+    # Find the class object of the current and up the tree
+    # if no name given or lookup the matching class from
+    # the root level if class name given
+    def find_class(class_name)
+      logger.debug "looking for class #{class_name ? class_name : 'current'}"
       if class_name
-        WNode.root.class_wnodes.find { |wn| wn.class_name == class_name }
+        c = WNode.root.classes.find { |c| c.name == class_name }
       else
-        self.class_wnode
-      end     
+        logger.debug "Looking for class wnode from wnode #{self} / ID: #{self.object_id} / 
+        type: #{self.type} / class_wnode ID #{self.class_wnode.object_id} / 
+        class_wnode #{self.class_wnode} /
+        self klass : #{self.klass} / 
+        self klass wtype : #{self.klass&.wtype} / "
+        c = self.class_wnode.klass
+      end    
+      if c
+        logger.debug "Found class #{c}"
+      else
+        logger.debug "Class #{class_name} not found"
+      end
+      c
+    end
+
+    # Create a Class object. **NOTE** the self
+    # wnode must be the parent of the new class
+    def create_class(class_name)
+      if (k = self.find_class(class_name))
+        raise "Cannot create class #{class_name} for wnode #{self} as it already exists!!"
+      else
+        wnc = WNode.new(:class, self)
+        wnc.klass = Klass.new(class_name)
+        logger.debug "Created class #{wnc.klass} under wnode #{self} / id: #{self.object_id}"
+        logger.debug "k inspection: #{wnc.klass}"
+      end
+      wnc.klass
+    end
+
+    def find_or_create_class(class_name)
+      self.find_class(class_name) || self.create_class(class_name)
     end
 
     # create a constant 
     def create_const(c_name, class_name, value, wtype)
       class_name ||= self.class_name
       if (cn = self.class_wnode)
-        cn.consts << (const = Const.new(class_name, c_name, value, wtype))
+        cn.klass.consts << (const = Const.new(class_name, c_name, value, wtype))
       else
         raise "No class found for class constant #{const}"
       end
@@ -236,11 +263,11 @@ module Rlang::Parser
     # Look for constant in the appropriate class wnode
     # (it can be the current class or another class)
     def find_const(c_name, class_name=nil)
-      wn_class = find_class(class_name)
-      raise "Can't find parent class for constant #{c_name}" unless wn_class
-      class_name = wn_class.class_name
+      k = find_class(class_name)
+      raise "Can't find parent class for constant #{c_name}" unless k
+      class_name = k.name
       logger.debug "looking for const #{c_name} in class #{class_name} at wnode #{self.class_wnode}..."
-      wn_class.consts.find { |c| c.class_name == class_name && c.name == c_name }
+      k.consts.find { |c| c.class_name == class_name && c.name == c_name }
     end
 
     def find_or_create_const(c_name, class_name, value, wtype)
@@ -248,27 +275,51 @@ module Rlang::Parser
     end
 
     def find_wattr(wa_name, class_name=nil)
-      wn_class = find_class(class_name)
-      raise "Can't find parent class for wattr #{wa_name}" unless wn_class
-      class_name = wn_class.class_name
-      logger.debug "looking for wattr #{wa_name} in class #{class_name} at wnode #{self.class_wnode}..."
-      wn_class.wattrs.find { |wa| wa.class_name == class_name && wa.name == wa_name }
+      k = find_class(class_name)
+      raise "Can't find parent class for wattr #{wa_name}" unless k
+      logger.debug "looking for wattr #{wa_name} in class #{k.name} at wnode #{self.class_wnode}..."
+      k.wattrs.find { |wa| wa.class_name == k.name && wa.name == wa_name }
     end
 
     def create_wattr(wa_name, wtype=WType::DEFAULT)
       if (cn = self.class_wnode)
         logger.debug "creating wattr #{wa_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
-        cn.wattrs << (wattr = WAttr.new(cn, wa_name, wtype))
+        cn.klass.wattrs << (wattr = WAttr.new(cn, wa_name, wtype))
       else
         raise "No class found for class attribute #{wa_name}"
       end
       wattr
     end
 
+    def find_or_create_wattr(wa_name, class_name=nil, wtype=WType::DEFAULT)
+      find_wattr(wa_name, class_name) || create_wattr(wa_name, wtype)
+    end
+
+    def create_ivar(iv_name, wtype=WType::DEFAULT)
+      if (cn = self.class_wnode)
+        logger.debug "creating ivar #{iv_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
+        cn.klass.wattrs << (wattr = WAttr.new(cn, iv_name, wtype))
+      else
+        raise "No class found for instance variable #{iv_name}"
+      end
+      wattr
+    end
+
+    def find_ivar(iv_name, class_name=nil)
+      klass = find_class(class_name)
+      raise "Can't find parent class for ivar #{iv_name}" unless klass
+      logger.debug "looking for ivar #{iv_name} in class #{class_name} at wnode #{self.class_wnode}..."
+      self.class_wnode.klass.wattrs.find { |wa| wa.ivar.class_name == klass.name && wa.ivar.name == iv_name }
+    end
+
+    def find_or_create_ivar(iv_name)
+      self.find_ivar(iv_name) || self.create_ivar(iv_name)
+    end
+
     def create_cvar(cv_name, value=0, wtype=WType::DEFAULT)
       if (cn = self.class_wnode)
         logger.debug "creating cvar #{cv_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
-        cn.cvars << (cvar = CVar.new(cn.klass_name, cv_name, value, wtype))
+        cn.klass.cvars << (cvar = CVar.new(cn.klass.name, cv_name, value, wtype))
       else
         raise "No class found for class variable #{cv_name}"
       end
@@ -277,12 +328,12 @@ module Rlang::Parser
 
     def find_cvar(cv_name)
       logger.debug "looking for cvar #{cv_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
-      self.class_wnode.cvars.find { |cv| cv.class_name == self.class_name && cv.name == cv_name }
+      self.class_wnode.klass.cvars.find { |cv| cv.class_name == self.class_name && cv.name == cv_name }
     end
 
     def create_lvar(name)
       if (mn = self.method_wnode)
-        mn.lvars << (lvar = LVar.new(name))
+        mn.method.lvars << (lvar = LVar.new(name))
       else
         raise "No method found for local variable #{name}"
       end
@@ -290,7 +341,7 @@ module Rlang::Parser
     end
 
     def find_lvar(name)
-      self.method_wnode.lvars.find { |lv| lv.name == name }
+      self.method_wnode.method.lvars.find { |lv| lv.name == name }
     end
 
     def find_or_create_lvar(name)
@@ -300,7 +351,7 @@ module Rlang::Parser
     # add method argument
     def create_marg(name)
       if (mn = self.method_wnode)
-        mn.margs << (marg = MArg.new(name))
+        mn.method.margs << (marg = MArg.new(name))
       else
         raise "No class found for class variable #{marg}"
       end
@@ -308,51 +359,48 @@ module Rlang::Parser
     end
 
     def find_marg(name)
-      self.method_wnode.margs.find { |ma| ma.name == name }
+      self.method_wnode.method.margs.find { |ma| ma.name == name }
     end
 
     # method_type is either :instance or :class
     def create_method(method_name, class_name, wtype, method_type)
-      raise "MEthod already exists: #{m}" \
-        if (m = find_method(method_name, class_name, method_type))
+      if (m = find_method(method_name, class_name, method_type))
+        raise "MEthod already exists: #{m.inspect}"
+      end
       if (cn = self.class_wnode)
-        class_name ||= cn.klass_name
-        cn.methods << (method = MEthod.new(method_name, class_name, wtype))
+        class_name ||= cn.klass.name
+        cn.klass.methods << (method = MEthod.new(method_name, class_name, wtype))
       else
         raise "No class wnode found to create method #{method_name}"
       end
       method_type == :class ? method.class! : method.instance!
-      logger.debug "Created MEthod: #{method.inspect}"
+      logger.debug "Created MEthod: #{method}"
       method
     end
 
-        # method_type is either :instance or :class
+    # method_type is either :instance or :class
     def find_method(method_name, class_name, method_type)
-      if class_name
-        class_wnode = find_class(class_name)
-      else
-        class_wnode = self.class_wnode
-      end
-      raise "Couldn't find class wnode for class_name #{class_name}" unless class_wnode
-      class_name = class_wnode.klass_name
+      k = self.find_class(class_name)
+      raise "Couldn't find class wnode for class_name #{class_name}" unless k
       if method_type == :class
-        method = class_wnode.methods.find { |m| m.name == method_name && m.class_name == class_name && m.class? }
+        method = k.methods.find { |m| m.name == method_name && m.class_name == class_name && m.class? }
       elsif method_type == :instance
-        method = class_wnode.methods.find { |m| m.name == method_name && m.class_name == class_name && m.instance? }
+        method = k.methods.find { |m| m.name == method_name && m.class_name == class_name && m.instance? }
       else
         raise "Unknown method type : #{method_type.inspect}"
       end
       if method
-        logger.debug "Found MEthod: #{method.inspect}"
+        logger.debug "Found MEthod: #{method}"
       else
-        logger.debug "Couldn't find MEthod: #{class_name.inspect},#{method_name.inspect}"
+        logger.debug "Couldn't find MEthod: #{k.name},#{method_name}"
       end
       method
     end
 
-    def find_or_create_method(method_name, class_name=nil, method_type=:class)
+    def find_or_create_method(method_name, class_name, wtype, method_type)
+      wtype ||= WType::DEFAULT
       self.find_method(method_name, class_name, method_type) || \
-      self.create_method(method_name, class_name, WType::DEFAULT, method_type)
+      self.create_method(method_name, class_name, wtype, method_type)
     end
 
     # Find block wnode up the tree

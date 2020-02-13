@@ -60,11 +60,43 @@ module Rlang::Parser
     none: { I32: :cast_error, I64: :cast_error, F32: :cast_error, F64: :cast_error, Class: :cast_error, none: :cast_error},
   }
 
+  # new template when object size > 0
+  NEW_TMPL = %q{
+  result :Object, :alloc, :%{default_wtype}
+  def self.new(%{margs})
+    result :%{class_name}
+    object_ptr = Object.alloc(%{class_name}._size_).cast_to(:%{class_name})
+    object_ptr.initialize(%{margs})
+    return object_ptr
+  end
+  }
+
+  # new template when object size iz 0 (no instance var)
+  # use 0 as the _self_ address in memory. It should never
+  # be used anyway
+  NEW_ZERO_TMPL = %q{
+    result :Object, :alloc, :%{default_wtype}
+    def self.new(%{margs})
+      result :%{class_name}
+      object_ptr = 0.cast_to(:%{class_name})
+      object_ptr.initialize(%{margs})
+      return object_ptr
+    end
+    }
+
+  # Do nothing initialize method
+  DUMB_INIT_TMPL = %q{
+  def initialize()
+    result :nil
+  end
+  }
+
   # Generate the wasm nodes and tree structure
   # ***IMPORTANT NOTE***
   # Unless otherwise stated all methods receive
   # the parent wnode as their first argument 
   # and must generate child nodes of this parent
+  # Child node created is returned
   class WGenerator
     include Log
     attr_accessor :parser
@@ -76,38 +108,40 @@ module Rlang::Parser
       @new_count = 0
     end
 
-    def klass(wnode, klass_name)
-      # First see if that class already exist
-      # If not create it.
-      unless (cwn = wnode.find_class(klass_name))
-        cwn = WNode.new(:class, wnode)
-        cwn.class_name = klass_name
-        cwn.wtype = WType.new(cwn.class_name)
-        WNode.root.class_wnodes << cwn
-      end
-      cwn
+    def klass(wnode, class_name)
+      # Create class object and class wnode if it doesn't exist yet
+      k = wnode.find_or_create_class(class_name)
+      # Create the Class.new method object too (not 
+      # the code yet in case the end user code defines
+      # its own implementation in the class body)
+      k.wnode.find_or_create_method(:new, k.name, k.wtype, :class)     
+      k.wnode
     end
 
-    def attributes(wnode)
+    def def_wattr(wnode)
       wnc = wnode.class_wnode
-      return if wnc.wattrs.empty?
       # Process each declared attribute
       offset = 0
-      wnc.wattrs.each do |wa|
-        logger.debug("Generating accessors for attribute #{wa}")
+      wnc.klass.wattrs.each do |wa|
+        logger.debug("Generating accessors for attribute #{wnc.klass.name}\##{wa.name}")
         # Generate getter and setter methods wnode
-        wattr_setter(wnc, wa, offset)
-        wattr_getter(wnc, wa, offset)
+        (wa.setter.wnode = wattr_setter(wnc, wa, offset)) unless wa.setter.wnode
+        (wa.getter.wnode = wattr_getter(wnc, wa, offset)) unless wa.getter.wnode
         # Update offset
         offset += wa.wtype.size
       end
 
-      # Also generate the Class::size method
-      size_method = wnc.create_method(:size, nil, WType::DEFAULT, :class)
-      wns = WNode.new(:insn, wnc, true)
-      wns.wtype = WType::DEFAULT 
-      wns.c(:class_size, func_name: size_method.wasm_name, 
-            wtype: wns.wasm_type, size: wnc.class_size)
+      # Also generate the Class::_size_ method
+      # always (needed by Object.allocate)
+      size_method = wnc.find_or_create_method(:_size_, wnc.klass.name, WType::DEFAULT, :class )
+      unless size_method.wnode
+        logger.debug("Generating #{size_method.class_name}\##{size_method.name}")
+        wns = WNode.new(:insn, wnc, true)
+        wns.wtype = WType::DEFAULT 
+        wns.c(:class_size, func_name: size_method.wasm_name, 
+              wtype: wns.wasm_type, size: wnc.class_size)
+        size_method.wnode = wns
+      end
     end
 
     # Generate attribute setter method wnode
@@ -133,32 +167,34 @@ module Rlang::Parser
     def instance_method(wnode, method)
       logger.debug("Generating wnode for instance method #{method.inspect}")
       wn = WNode.new(:method, wnode)
+      method.wnode = wn
       wn.method = method # must be set before calling func_name
       wn.wtype = method.wtype
       wn.c(:func, func_name: wn.method.wasm_name)
       # Also declare a "hidden" parameter representing the
       # pointer to the instance (always default wtype)
       wn.create_marg(:_self_)
-      logger.debug("MEthod built: #{wn.method.inspect}")
+      logger.debug("Building instance method: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
       wn
     end
 
     def class_method(wnode, method)
       logger.debug("Generating wnode for class method #{method}")
       wn = WNode.new(:method, wnode)
+      method.wnode = wn
       wn.method = method # must be set before calling func_name
       wn.wtype = method.wtype
       wn.c(:func, func_name: wn.method.wasm_name)
-      logger.debug("Building method: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
+      logger.debug("Building class method: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
       wn
     end
 
     def params(wnode)
-      wnode = wnode.method_wnode
+      wnm = wnode.method_wnode
       # use reverse to preserve proper param order
-      wnode.margs.reverse.each do |marg|
+      wnm.method.margs.reverse.each do |marg|
         logger.debug("Prepending param #{marg}")
-        wn = WNode.new(:insn, wnode, true)
+        wn = WNode.new(:insn, wnm, true)
         wn.wtype = marg.wtype
         wn.c(:param, name: marg.wasm_name)
       end
@@ -173,10 +209,10 @@ module Rlang::Parser
     end
 
     def locals(wnode)
-      wnode = wnode.method_wnode
-      wnode.lvars.reverse.each do |lvar|
+      wnm = wnode.method_wnode
+      wnm.method.lvars.reverse.each do |lvar|
         logger.debug("Prepending local #{lvar.inspect}")
-        wn = WNode.new(:insn, wnode, true)
+        wn = WNode.new(:insn, wnm, true)
         wn.wtype = lvar.wtype
         wn.c(:local, name: lvar.wasm_name)
       end
@@ -189,13 +225,14 @@ module Rlang::Parser
       wn    
     end
 
+    # Set class variable
     # Constant assignment doesn't generate any code
     # A Data object is instantiated and initialized
     # when the Const object is created in parser
     def casgn(wnode, const)
     end
 
-    # Read class variable
+    # Get class variable
     def const(wnode, const)
       (wn = WNode.new(:insn, wnode)).wtype = const.wtype
       wn.c(:load, wtype: const.wtype, var_name: const.wasm_name)
@@ -203,20 +240,51 @@ module Rlang::Parser
       wn
     end
 
-    # Global variable assignment
+    # Set Global variable
     def gvasgn(wnode, gvar)
       (wn = WNode.new(:insn, wnode)).wtype = gvar.wtype
       wn.c(:global_set, var_name: gvar.name)
       wn
     end
 
-    # Global variable read
+    # Get Global variable
     def gvar(wnode, gvar)
       (wn = WNode.new(:insn, wnode)).wtype = gvar.wtype
       wn.c(:global_get, var_name: gvar.name)
       wn
     end
 
+    # Call setter (on wattr or instance variable)
+    # This is the same as calling the corresponding setter
+    def call_setter(wnode, wnode_recv, wattr)
+      wn = self.call(wnode, wnode_recv.wtype.name, wattr.setter_name, :instance)
+      # First argument of the setter must be the receiver
+      wnode_recv.reparent_to(wn)
+      wn
+    end
+
+    # Call getter (on wattr or instance variable)
+    # This is the same as calling the corresponding getter
+    def call_getter(wnode, wnode_recv, wattr)
+      wn = self.call(wnode, wnode_recv.wtype.name, wattr.getter_name, :instance)
+      # First argument of the getter must always be the receiver
+      wnode_recv.reparent_to(wn)
+      wn
+    end
+
+    # Set instance variable
+    # This is the same as calling the corresponding setter
+    def ivasgn(wnode, wnode_recv, wattr)
+      self.call_setter(wnode, wnode_recv, wattr)
+    end
+
+    # Get instance variable. 
+    # This is the same as calling the corresponding getter
+    def ivar(wnode, wnode_recv, wattr)
+      self.call_getter(wnode, wnode_recv, wattr)
+    end
+
+    # Set class variable
     # Create the class variable storage node and
     # an empty expression node to populate later
     def cvasgn(wnode, cvar)
@@ -226,7 +294,7 @@ module Rlang::Parser
       wn
     end
 
-    # Read class variable
+    # Get class variable
     def cvar(wnode, cvar)
       (wn = WNode.new(:insn, wnode)).wtype = cvar.wtype
       wn.c(:load, wtype: cvar.wtype, var_name: cvar.wasm_name)
@@ -388,7 +456,7 @@ module Rlang::Parser
         if [:add, :sub].include? wnode_op.wargs[:operator]
           (wn_mulop = WNode.new(:insn, wnode_op)).c(:operator, operator: :mul)
           WNode.new(:insn, wn_mulop).c(:const, 
-            value: lambda { wnode_recv.find_class(wnode_recv.wtype.name).class_size })
+            value: lambda { wnode_recv.find_class(wnode_recv.wtype.name).size })
           wnode_args.first.reparent_to(wn_mulop)
         else
           # It's a relational operator. In this case
@@ -403,11 +471,11 @@ module Rlang::Parser
 
     # Statically allocate an object in data segment
     # with the size of the class
-    def new(wnode, class_name)
-      class_wnode = wnode.find_class(class_name)
-      if class_wnode.class_size > 0
+    def static_new(wnode, class_name)
+      klass = wnode.find_class(class_name)
+      if klass.size > 0
         data_label = "#{class_name}_new_#{@new_count += 1}"
-        data = DAta.new(data_label.to_sym, "\x00"*class_wnode.class_size)
+        data = DAta.new(data_label.to_sym, "\x00"*klass.wnode.class_size)
         address = data.address
       else
         # TODO: point to address 0. It is not safe but normally
@@ -421,9 +489,44 @@ module Rlang::Parser
       wn_object_addr
     end
 
+    # Create the dynamic new method. It allocates memory
+    # for the object created and calls initialize
+    def def_new(wnode_class)
+      # no new method for native types
+      return if wnode_class.klass.wtype.native?
+      new_method = wnode_class.find_method(:new, wnode_class.class_name, :class)
+      return if new_method.wnode # already implemented
+
+      init_method = wnode_class.find_method(:initialize, wnode_class.class_name, :instance)
+      logger.debug "Creating code for #{wnode_class.class_name}.new"
+      new_tmpl = wnode_class.class_size.zero? ? NEW_ZERO_TMPL : NEW_TMPL
+      new_source = new_tmpl % {
+        default_wtype: WType::DEFAULT.name,
+        class_name: wnode_class.class_name,
+        # Do not pass _self_ argument to the new method of course !!
+        margs: init_method.margs.reject {|ma| ma._self_?}.map(&:name).join(', '), 
+        class_size: wnode_class.class_size
+      }
+      new_method.wnode = self.parser.parse(new_source, wnode_class)
+    end
+
+    # Define a dumb initialize method if not implemented
+    # already in user code
+    def def_initialize(wnode_class)
+      # no new/initialize method for native types
+      return if WType.new(wnode_class.class_name).native? 
+      # generate code for a dumb initialize method if not defined
+      # in user code
+      unless wnode_class.find_method(:initialize, wnode_class.class_name, :instance)
+        logger.debug "Creating MEthod and code for #{wnode_class.class_name}#initialize"
+        init_source = DUMB_INIT_TMPL
+        self.parser.parse(init_source, wnode_class)
+      end
+    end
+
     def call(wnode, class_name, method_name, method_type)
-      method = wnode.find_or_create_method(method_name, class_name, method_type)
-      logger.debug "found method #{method.inspect}"
+      method = wnode.find_or_create_method(method_name, class_name, nil, method_type)
+      logger.debug "found method #{method}"
       (wn_call = WNode.new(:insn, wnode)).c(:call, func_name: method.wasm_name)
       wn_call.wtype = method.wtype
       wn_call
@@ -431,7 +534,7 @@ module Rlang::Parser
 
     # self in an instance context is passed as the first argument
     # of a method call
-    def _self(wnode)
+    def _self_(wnode)
       (wns = WNode.new(:insn, wnode)).c(:local_get, var_name: '$_self_')
       wns.wtype = WType.new(wnode.class_name)
       wns
@@ -499,11 +602,7 @@ module Rlang::Parser
     # Determine which wasm type has precedence among
     # all wnodes
     def self.leading_wtype(*wnodes)
-      begin
-        WType.leading(wnodes.map(&:wtype))
-      rescue
-        raise "#{wnodes.map(&:to_s)}"
-      end
+      WType.leading(wnodes.map(&:wtype))
     end
   end
 end

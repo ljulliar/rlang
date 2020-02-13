@@ -8,15 +8,13 @@ Still, to make this Ruby to WebAssembly compilation possible a number of trade-o
 
 ## The Rlang object model
 
-In Rlang you can define classes and those classes can be instantiated but *only* statically not dynamically. Supporting dynamic object allocation would more or less mean that Rlang becomes a Ruby virtual machine and this is not the intent. What the intent is with Rlang is to provide you with a language that can assist you in developing such a Virtual Machine for instance ;-)
-
-One of the consequence of this for instance is that you can statically instantiate a new object in the body of a class not in a method. In other words objects can be instantiated at compile time not at runtime (note: this may change in a future version)
+In Rlang you can define classes and those classes can be instantiated either statically at compile time or  dynamically at runtime. There is no inheritance mechanism today between classes in the current version. Classes cannot be nested.
 
 ## What Rlang does
 
 Rlang provides:
 * Classes, class attributes and class variables
-* Object instantiation (only at compile time)
+* Object instantiation, attribute accessors and instance variables
 * Method definition and method calls
 * Integers and booleans 
 * Constants
@@ -48,9 +46,9 @@ calling that method later in your code is as simple as invoking `Math.fib(20)`
 ## Classes
 Classes are core constructs of Rlang and are very similar to Ruby classes.
 
-Within a class you define methods and class variables. Actually all methods must be defined within a class. In other words you can not define a method at the top level of your Rlang code (not a very good practice anyway, even in plain Ruby). Also there is no inheritance mechanism in Rlang in the current version.
+In Rlang, all methods must be defined within the scope of a class. In other words you can not define a method at the top level of your Rlang code (not a very good practice anyway, even in plain Ruby). Also there is no inheritance mechanism in Rlang in the current version.
 
-Here is an example of a class definition and the initialization and use of a class variable written in Rlang:
+Here is an example of a class definition and the initialization and use of a class variable written in Rlang (note: this example uses only class methods on purpose. Instance methods are covered later in this document):
 
 ```ruby
 class MyClass
@@ -68,18 +66,16 @@ end
 ```
 
 This short piece of code shows several interesting points:
-1. A class variable can be statically initialized at the class level. Concretely this means that at compile time the memory location corresponding to the `@@cvar` class variable initially receives the value 100.
+1. A class variable can be statically initialized at the class level. Concretely this means that at compile time the memory location corresponding to the `@@cvar` class variable is statically initialized at 100.
 1. Methods in this example are class methods, hence the use of `self.take_one` and `self.refill` in method definitions but instance methods are also supported (more on this later)
 1. In `MyClass::take_one` you can see that Rlang also supports convenient syntactic sugar like `if` as a modifier or combined operation and assignment as in Ruby (here the `-=` operator)
 
-### Class attributes
-Since objects cannot be instantiated at runtime in Rlang, there is no such thing as instance variable. Rlang uses a special directive `wattr` to do 4 things at once: 
-1. Define the attributes of a class (see that as its instance variables somehow)
-2. Define the type of the attributes (remember, Rlang is a compiler...)
-2. Define the corresponding accessors both getter and setter (like `attr_accessor` does in Ruby)
-3. Compute the memory footprint needed when objects of this class are instantiated.
+### Class attributes and instance variables
+Rlang support both the use of class attributes and instance variables. Class attribute declaration is happening through the `wattr` directive. I actually defines a couple of things for you:
+1. Define the corresponding accessors both getter and setter (like `attr_accessor` does in Ruby)
+2. Define the corresponding instance variable
 
-That's a lot with a single statement and it makes your code easy to read. Here is an example
+Here is an example showing the definition of a single attribute
 ```ruby
 class Square
   wattr :side
@@ -102,7 +98,7 @@ class Test
 end
 ```
 
-The code is pretty straightforward: a new square instance is created, its side is set to 10 and as you would expect the call to the Square#area method would return 100.
+The code is pretty straightforward: a new square instance is created (here it is created statically at compile time), its side attribute is set to 10 and, as you would expect, the call to the Square#area method returns 100.
 
 ### Class attribute type
 In the example above the `side` attribute is implicitely using the `:I32` (long integer) WebAssembly type. It's the default Rlang type. Assuming you want to manage big squares, you'd have to use `:I64` (double integer) like this for the `side` attribute and also instruct Rlang that the return value of area is also `:I64` (more on this later).
@@ -120,19 +116,55 @@ end
 ```
 
 ## Object instantiation
-In the current version of Rlang objects can only be instantiated at compile time not at runtime. As a result of this, all object instantiation must happen in the body of a class not in the body of a method. You have already seen an example of such an object instantiation in the previous example with `Square.new` being instantiated and stored in the class variable `@@cvar`.
+Starting with version 0.4.0, Rlang is equipped with a dynamic memory allocator (see [Rlang library](#the-rlang-library) section). It is therefore capable of allocating objects in a dynamic way at *runtime*. Prior versions were only capable of allocating objects statically at *compile* time.
 
-Similarly you can also instantiate and store an object in a global variable.
+### Static objects
+You have already seen how to perform static objects allocation in one of our previous example. A statement like `@@square = Square.new` appearing in the body of a class definition result in a portion of the WebAssembly memory being statically allocated and initialized at compile time by Rlang and the `@@square` variable points to that particular memory location. Similarly you can also statically instantiate and store an object in a global variable or in a constant like this:
+
+```ruby
+SQUARE = Square.new
+$SQUARE = Square.new
+```
+
+### Dynamic objects
+At any point in the body of method you can dynamically instantiate a new object. Here is an exemple:
+
+```ruby
+class Cube
+  wattr :x, :y, :z
+
+  def initialize(x, y, z)
+   @x = x; @y = y; @z = z
+  end
+
+  def volume
+    @x * @y * @z
+  end
+end
+
+class Main
+  def self.run
+    cube = Cube.new(10, 20, 30)
+    v = cube.volume # would be 6000
+    # ... Do what eveer you have to do...
+    Object.free(cube)
+  end
+end
+```
+In this example the `Cube` method uses 3 instance variables `@x, @y, @z`. Those instance variables can be accessed through the usual attribute accessors like `Cube#x` and `Cube#x=`. In your code you can also use the `_size_` class method to know how much bytes an object consumes in meory. Here a call to `Cube._size_` would return 12 as each instance variable is an `I32` using 4 bytes each.
+
+### (Lack of) Garbage collection
+In its current version, Rlang doesn't come with a garbage collector. So all dynamically allocated objects must be eventually free'd explicitely using the `Object.free` method in your code when objects are no longer needed.
 
 ## Methods
-Methods in Rlang are defined as you would normally do in Ruby by using. They can be either class or instance methods.
+Methods in Rlang are defined as you would normally do in Ruby by using the `def` reserved keyword. They can be either class or instance methods.
 
 ### Method arguments
 Rlang method definition supports fixed name arguments in any number. The  *args and **args notation are not supported.
 
 By default all arguments in Rlang are considered as being type `:I32` (a 32 bit integer). See the Type section below for more details. If your argument is of a different type you **must** explicitely state it. 
 ```ruby
-def self.m_two_args(arg1, arg2, arg3)
+def m_three_args(arg1, arg2, arg3)
   arg arg1: :Square, arg2: :I64
   # your code here...
 end
@@ -151,18 +183,18 @@ def self.m_no_return_value(arg1, arg2)
   return
 end
 ```
-Similarly you can use `return :I64` if your method is to return a double integer value or `return :Square` if you method returns an object.
+Similarly you can use `result :I64` if your method is to return a double integer value or `return :Square` if you method returns an object.
 
-With a few exceptions (see the Conditional and Iteration Structures sections below), each Rlang statements evaluate to a value. In the absence of an explicit `return some_expression` statement, a method returns the value of the last evaluated statement. In the example above the method `MyClass::take_one` returns the value of `@@cvar` after decreasing it by one and `MyClass::refill` returns 100.
+With a few exceptions (see the Conditional and Iteration Structures sections below), each Rlang statements evaluate to a value. In the absence of an explicit `return` statement, a method returns the value of the last evaluated statement. In the example above defining the `MyClass` class, the method `MyClass.take_one` returns the value of `@@cvar` after decreasing it by one and `MyClass.refill` returns 100.
 
-Rlang also gives you the ability to declare the return type of a method like this 
+Rlang also gives you the ability to declare the return type of a method like this anywhere in your code.
 ```ruby
-result :class_name, :method_name, :wasm_type
+result :class_name, :method_name, :your_type_here
 ```
 
-This result directive must be used to instruct the compiler about the return type of a method if it has not seen it yet (e.g. the method definition is coming later in your source code). But keep in mind that this is only needed if the method returns something different than the default type (`:I32`).
+This result directive must be used to instruct the compiler about the return type of a method if it has not seen it yet (e.g. the method definition is coming later in your source code) or when calling a method from another class defined in a different file not yet compiled. But keep in mind that this is only needed if the method returns something different than the default type (`:I32`).
 
-If `:method_name` symbol starts with a `#` it refers to an instance method. Without it it refers to a class method.
+Note: in this directive `:method_name` symbol starts with a `#` characters if it refers to an instance method. Without it it refers to a class method.
 
 For an example see the [test_def_result_type_declaration.rb](https://github.com/ljulliar/rlang/blob/master/test/rlang_test_files/test_def_result_type_declaration.rb), a Rlang file that is part of the Rlang test suite.
 
@@ -410,8 +442,14 @@ Rlang comes with a library that provides a number of pre-defined classes and met
 require 'rlang/lib'
 ```
 
-For now, the Rlang library is very modest and only contains basic WebAssembly memory management functions like `Memory::size` and `Memory::grow` to mirror the WebAssembly functions of the same name.
+For now, the Rlang library is very modest and containoffers the following classes and methods
 
-A basic dynamic memory allocator is also provided. It is shamelessly adapted from example provided in the famous Kernigan & Richie C book. Take a look at the [C version](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.c) and see how easy it is to adapt  [Malloc in Rlang](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb).
+* **Memory** class: provides Rlang methods like `Memory::size` and `Memory::grow` mapping directly to the WebAssembly functions of the same name (see WebAssembly specficiations)
+* **Malloc** class: provides a dynamic memory manager. It is used by Rlang to instantiate new objects but you can also use it in your own code if need be.
+  * Malloc.malloc(nbytes) : dynamically allocates nbytes of memory and return address of the allocated memory space or -1 if it fails
+  * Malloc.free(address) : frees the block of memory at the given address
+* **Object** class: provides a couple of object management method. Use `Object.free` to free an object.
+
+As a side note, the dynamic memory allocator provided with Rlang is quite simple. It is shamelessly adapted from example provided in the famous Kernigan & Richie C book 2nd edition. Take a look at the [C version](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.c) and see how easy it is to rewrite it in [Rlang](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb).
 
 That's it! Enjoy Rlang and, as always, feedback and contributions are welcome.

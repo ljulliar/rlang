@@ -2,25 +2,29 @@
 # Copyright (c) 2019, Laurent Julliard and contributors
 # All rights reserved.
 
+require_relative '../../utils/log'
 require_relative '../ext/tempfile'
+require_relative './renderer'
 
 module Builder::Wat
   class Builder
+    include Log
 
     @@wat_compiler = 'wat2wasm'
 
     attr_reader :target, :source
 
-    def initialize(source, target, include_paths = nil)
+    def initialize(source, target)
       check_compiler
       @source = source
-      @target = target
-      @include_paths = include_paths || ['.', File.expand_path('../../machine', source)]
-      if File.extname(source) == '.erb'
-        @wat_path = self.assemble
+      if target
+        @target = target
       else
-        @wat_path = source
+        @target = @source.gsub(/\.wat$/,'.wasm')
+        @temp_target = true
       end
+      logger.debug "Wat Builder Source: #{@source}"
+      logger.debug "Wat Builder Target: #{@target}"
     end
 
     def check_compiler
@@ -29,24 +33,11 @@ module Builder::Wat
     end
 
     def compile
-      @target ||= @wat_path.gsub(/\.wat$/,'.wasm')
-      %x{ #{@@wat_compiler} #{@wat_path} -o #{@target} }
-      @target
+      system("#{@@wat_compiler} #{@source} -o #{@target}")
     end
 
     def cleanup
-      File.unlink(@wat_path) unless @wat_path == @source
-    end
-
-    # Create a tempfile with .wat extension from 
-    # an erb template
-    def assemble
-      renderer = Renderer.new(@include_paths)
-      tf = Tempfile.new([File.basename(@source), '.wat'])
-      tf.persist! # do not delete tempfile if inspection needed
-      tf.write(renderer.render(@source))
-      tf.close
-      tf.path
+      File.unlink(@target) if @temp_target
     end
   end
 end

@@ -1,4 +1,6 @@
-class Header
+require 'rlang/lib'
+
+class MyHeader
   wattr :size, :ptr
   wattr_type size: :I64, ptr: :I32
 end
@@ -9,7 +11,7 @@ class Test
   # address 0 in memory
   CONST1 = 10
   CONST2 = 100
-  @@cvar = Header.new
+  @@cvar = MyHeader.new
 
   export
   def self.base

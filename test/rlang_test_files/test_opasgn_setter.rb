@@ -1,3 +1,5 @@
+require 'rlang/lib'
+
 class Square
   wattr :side
 end

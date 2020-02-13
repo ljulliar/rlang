@@ -15,6 +15,7 @@ require_relative '../../utils/log'
 require_relative './ext/type'
 
 class WType
+  include Log
 
   WASM_TYPE_MAP = {
     I64: Type::I64,

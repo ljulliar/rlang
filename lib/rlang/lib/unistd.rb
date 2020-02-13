@@ -7,7 +7,29 @@
 # sbrk(n) returns the address of the allocated block or -1 if it failed
 # srbk(0) returns the current value of the break
 # Note: in WASM we can only grow linear memory by pages (64 KB block)
+
+
+# These 3 global variables below are used by the
+# dynamic memory allocator. You can redefine them
+# in your own module
+
+# Heap base address (make sure it's aligned on 
+# an address compatible with the most restrictive data type
+# used in WASM (I64). So make this address a multiple of 8
+$HEAP = 1024
+
+# Maximum amount of memory the heap can grow
+# NOTE: must be less than the upper WASM memory limit (4GB)
+$HEAP_MAX_SIZE = 1073741824  # 1GB
+
+# Current heap size (starts at 0, the first malloc will
+# set it up)
+$HEAP_SIZE = 0
+
 class Unistd
+  result :Memory, :grow, :I32
+  result :Memory, :size, :I32
+
   def self.sbrk(n)
     # local variables used. All default type
     # wasm_mem_size:  current wasm memory size (in bytes)

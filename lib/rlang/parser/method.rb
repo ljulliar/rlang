@@ -2,7 +2,7 @@
 # Copyright (c) 2019, Laurent Julliard and contributors
 # All rights reserved.
 
-# Class variables
+# Rlang methods
 require_relative '../../utils/log'
 require_relative './wtype'
 require_relative './export'
@@ -14,14 +14,18 @@ module Rlang::Parser
     include Log
 
     attr_reader :name, :wtype
-    attr_accessor :class_name
+    attr_accessor :class_name, :margs, :lvars, :wnode
 
     def initialize(name, class_name, wtype=WType::DEFAULT)
+      raise "Wrong method wtype argument: #{wtype.inspect}" unless wtype.is_a? WType
       @name = name
       @class_name = class_name
       @wtype = wtype
       @instance = false
-      logger.debug "Method instance created #{self.inspect}"
+      @wnode = nil # wnode where method is implemented
+      logger.debug "Method created #{self.inspect}"
+      @margs = []   # method args
+      @lvars = []   # local variables
     end
 
     def instance!
@@ -42,7 +46,7 @@ module Rlang::Parser
 
     def wtype=(wtype)
       @wtype = wtype
-      logger.debug "Method wtype updated: #{self.inspect}"
+      logger.debug "Method wtype updated: #{self}"
     end
 
     def wasm_name

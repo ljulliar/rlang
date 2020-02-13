@@ -6,24 +6,44 @@ require 'test_helper'
 require 'wasmer'
 require_relative '../lib/builder'
 
+# Prevent emitting warnings about toot
+# many argument in sprintf
+$-w = false
 
 class RlangMallocTest < Minitest::Test
 
   TEST_FILES_DIR = File.expand_path('../rlang_malloc_files', __FILE__)
   RLANG_DIR = File.expand_path('../../lib', __FILE__)
 
+  # Rlang compilation options by method
+  @@load_path_options = {}
+
   def setup
     # Compile rlang test file to WASM bytecode
     test_file = File.join(TEST_FILES_DIR,"test_malloc.rb")
-    builder = Builder::Rlang::Builder.new()
-    target = Tempfile.new([self.name, '.wat'])
-    target.persist!
-    assert builder.compile(test_file, target.path, 
-      "--export-all -I#{RLANG_DIR} --memory 1")
-    # Instantiate a wasmer runtime
-    bytes = File.read(builder.target)
+
+    # Setup parser/compiler options
+    options = {}
+    options[:LOAD_PATH] = @@load_path_options[self.name.to_sym] || []
+    options[:__FILE__] = test_file
+    options[:export_all] = true
+    options[:memory_min] = 1
+    options[:log_level] = 'FATAL'
+
+    # Compile Wat file to WASM bytecode
+    @builder = Builder::Rlang::Builder.new(test_file, nil, options)
+    unless @builder.compile
+      raise "Error compiling #{test_file} to #{@builder.target}"
+    end
+
+    # Instantiate wasmer runtime
+    bytes = File.read(@builder.target)
     @instance = Wasmer::Instance.new(bytes)
     @exports = @instance.exports
+  end
+
+  def teardown
+    @builder.cleanup
   end
 
   def test_initial_memory_size

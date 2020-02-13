@@ -11,23 +11,6 @@
 require 'rlang/lib/memory'
 require 'rlang/lib/unistd'
 
-# These 3 global variables below are used by the
-# dynamic memory allocator. They must however be 
-# defined in the end applications.
-
-# Heap base address (make sure it's aligned on 
-# an address compatible with the most restrictive data type
-# used in WASM (I64). So make this address a multiple of 8
-# $HEAP = 10024
-
-# Maximum amount of memory the heap can grow
-# NOTE: must be less than the upper WASM memory limit (4GB)
-# $HEAP_MAX_SIZE = 1073741824  # 1GB
-
-# Current heap size (starts at 0, the first malloc will
-# set it up)
-# $HEAP_SIZE = 0
-
 # minimum number of units to request
 $NALLOC = 1024
 
@@ -75,7 +58,7 @@ class Malloc
     # allocate memory by chunk of units (the unit is
     # the size of a Header object here)
     # units = (nbytes+sizeof(Header)-1)/sizeof(Header) + 1;
-    nunits = (nbytes + Header.size - 1) / Header.size + 1
+    nunits = (nbytes + Header._size_ - 1) / Header._size_ + 1
 
     # No free list yet. Initialize it.
     if (prevp = @@freep) == 0 
@@ -126,7 +109,7 @@ class Malloc
     local up: :Header
 
     nu = $NALLOC if nu < $NALLOC
-    cp = Unistd::sbrk(nu * Header.size)
+    cp = Unistd::sbrk(nu * Header._size_)
     return 0 if cp == -1 # no space at all
 
     up = cp.cast_to(:Header)
@@ -137,8 +120,15 @@ class Malloc
 
   # Free memory block
   def self.free(ap)
+    arg ap: :I32
     result :none
     local bp: :Header, p: :Header
+
+    # NULL is a special value used for
+    # all Rlag object instances that doesn't 
+    # have any instance variables and therefore
+    # doesn't use any memory
+    return if ap == 0
 
     bp = ap.cast_to(:Header) - 1 # point to block header
     p = @@freep

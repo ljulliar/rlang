@@ -1,3 +1,5 @@
+require 'rlang/lib'
+
 class Test
 
   wattr :x, :y

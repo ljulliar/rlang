@@ -19,6 +19,10 @@ module Rlang::Parser
       logger.debug "Method argument #{name} created"
     end
 
+    def _self_?
+      @name == :_self_
+    end
+
     def wasm_name
       "$#{@name}"
     end

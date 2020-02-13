@@ -6,6 +6,9 @@ require 'test_helper'
 require 'wasmer'
 require_relative '../lib/builder'
 
+# Prevent emitting warnings about toot
+# many argument in sprintf
+$-w = false
 
 class RlangTest < Minitest::Test
 
@@ -13,34 +16,41 @@ class RlangTest < Minitest::Test
   RLANG_DIR = File.expand_path('../../lib', __FILE__)
 
   # Rlang compilation options by method
-  # add "-v debug" to debug a test method
-  @@rlang_options = {
-    test_require: "-I#{TEST_FILES_DIR}",
-    test_require_embedded: "-I#{TEST_FILES_DIR}",
-    test_require_twice: "-I#{TEST_FILES_DIR}",
-    test_require_relative: "",
-    test_require_wat: "-I#{TEST_FILES_DIR}",
-    test_require_wat_with_extension: "-I#{TEST_FILES_DIR}",
-    test_require_with_extension: "-I#{TEST_FILES_DIR}",
-    test_rlanglib_memory: "-I#{RLANG_DIR}",
+  @@load_path_options = {
+    test_require: [TEST_FILES_DIR],
+    test_require_embedded: [TEST_FILES_DIR],
+    test_require_twice: [TEST_FILES_DIR],
+    test_require_wat: [TEST_FILES_DIR],
+    test_require_wat_with_extension: [TEST_FILES_DIR],
+    test_require_with_extension: [TEST_FILES_DIR]
   }
 
   def setup
     # Name of wasm test method to call
     @wfunc = "test_c_#{self.name}"
-    # Compile rlang test file to WASM bytecode
     test_file = File.join(TEST_FILES_DIR,"#{self.name}.rb")
-    @builder = Builder::Rlang::Builder.new()
-    target = Tempfile.new([self.name, '.wat'])
-    target.persist!
-    assert @builder.compile(test_file, target.path, @@rlang_options[self.name.to_sym])
-    # Instantiate a wasmer runtime
+
+    # Setup parser/compiler options
+    options = {}
+    options[:LOAD_PATH] = @@load_path_options[self.name.to_sym] || []
+    options[:__FILE__] = test_file
+    options[:export_all] = true
+    options[:memory_min] = 1
+    options[:log_level] = 'FATAL'
+
+    # Compile Wat file to WASM bytecode
+    @builder = Builder::Rlang::Builder.new(test_file, nil, options)
+    unless @builder.compile
+      raise "Error compiling #{test_file} to #{@builder.target}"
+    end
+
+    # Instantiate wasmer runtime
     bytes = File.read(@builder.target)
     @instance = Wasmer::Instance.new(bytes)
   end
 
   def teardown
-    @builder.cleanup
+    #@builder.cleanup
   end
 
   def test_bool_and
@@ -108,6 +118,10 @@ class RlangTest < Minitest::Test
 
   def test_cast_i32_to_i64_unsigned
     assert_equal 3, @instance.exports.send(@wfunc)
+  end
+
+  def test_cast_instance_var
+    assert_equal 5, @instance.exports.send(@wfunc)
   end
 
   def test_cast_i32_to_i64
@@ -190,6 +204,10 @@ class RlangTest < Minitest::Test
     assert_equal 2, @instance.exports.send(@wfunc)
   end
   
+  def test_global_var_init_twice
+    assert_equal 2, @instance.exports.send(@wfunc)
+  end
+  
   def test_global_var_set
     assert_equal 0, @instance.exports.send(@wfunc)
   end
@@ -232,6 +250,10 @@ class RlangTest < Minitest::Test
 
   def test_inline_with_wtype
     assert_equal 40_000_000_000, @instance.exports.send(@wfunc, 20000)
+  end
+
+  def test_instance_var_init
+    assert_equal 100, @instance.exports.send(@wfunc)
   end
 
   def test_local_var_chained_asgn
@@ -295,6 +317,10 @@ class RlangTest < Minitest::Test
     assert_equal 1, @instance.exports.send(@wfunc)
   end    
 
+  def test_opasgn_instance_var
+    assert_equal 900, @instance.exports.send(@wfunc)
+  end
+
   def test_opasgn_local_var
     assert_equal 400, @instance.exports.send(@wfunc, 20)
   end
@@ -338,14 +364,6 @@ class RlangTest < Minitest::Test
 
   def test_require_with_extension
     assert_equal 200, @instance.exports.send(@wfunc)
-  end
-
-  def test_rlanglib_memory
-    # Return current memory size
-    assert_equal 4, @instance.exports.send(@wfunc, 0)
-    # grow memory size by 2 pages
-    assert_equal 4, @instance.exports.send(@wfunc, 2)
-    assert_equal 6, @instance.exports.send(@wfunc, 0)
   end
 
   def test_wattr_class_size

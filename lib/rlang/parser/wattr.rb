@@ -5,29 +5,37 @@
 # Method argument class
 
 require_relative '../../utils/log'
+require_relative './ivar'
 require_relative './wtype'
 
 module Rlang::Parser
   class WAttr
     include Log
-    attr_reader :name, :wtype, :getter, :setter
+    attr_reader :name, :wtype, :getter, :setter, :ivar
 
+    # The name argument can either be the attribute name
+    # (e.g. :size) or an ivar name (e.g. :@size)
     def initialize(class_wnode, name, wtype=WType::DEFAULT)
       @class_wnode = class_wnode
-      @name = name
+      if name.to_s[0] == '@'
+        @ivar = IVar.new(@class_wnode, name, wtype)
+        @name = @ivar.wattr_name
+      else
+        @name = name
+        @ivar = IVar.new(@class_wnode, self.ivar_name, wtype)
+      end
       @wtype = wtype
       # Also create the corresponding getter and setter
       # method objects (with default WType - wattr_type
       # directives might later change this wtype)
       # Don't generate WAT code yet
-      @getter = @class_wnode.create_method(self.getter_name, nil, wtype, :instance)
+      @getter = @class_wnode.find_or_create_method(self.getter_name, nil, wtype, :instance)
       @getter.instance!
       logger.debug "Getter created: #{@getter.inspect}"
 
-      @setter = @class_wnode.create_method(self.setter_name, nil, wtype, :instance)
+      @setter = @class_wnode.find_or_create_method(self.setter_name, nil, wtype, :instance)
       @setter.instance!
       logger.debug "Setter created: #{@setter.inspect}"
-
       logger.debug "Class attribute #{name} created"
     end
 
@@ -40,11 +48,16 @@ module Rlang::Parser
       # Adjust corresponding method objects wtype accordingly
       @getter.wtype = wtype
       @setter.wtype = wtype
-      logger.debug "Getter and Setter wtype updated : #{@getter.inspect}"
+      @ivar.wtype   = wtype
+      logger.debug "WAttr/Getter/Setter/ivar wtype updated : #{@getter.inspect}"
     end
 
     def size
       @wtype.size
+    end
+
+    def ivar_name
+      @ivar ? @ivar.name : :"@#{name}"
     end
 
     def wasm_name

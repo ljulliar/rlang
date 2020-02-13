@@ -24,6 +24,10 @@ module Rlang::Parser
       @@globals.find {|g| g.name == name}
     end
 
+    def self.reset!
+      @@globals = []
+    end
+
     def mutable?
       @mutable
     end

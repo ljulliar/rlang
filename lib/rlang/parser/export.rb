@@ -11,6 +11,10 @@ module Rlang::Parser
       @@exports << self
     end
 
+    def self.reset!
+      @@exports = []
+    end
+
     # Export Rlang funcs, etc... grouping them
     # by object type for Wasm code readability
     def self.transpile

@@ -3,7 +3,7 @@
 # All rights reserved.
 
 # Rlang standard library
-
+require_relative './lib/object'
 require_relative './lib/type'
 require_relative './lib/memory'
 require_relative './lib/unistd'

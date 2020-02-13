@@ -29,6 +29,11 @@ module Rlang::Parser
       logger.debug "New Data[#{@label}] initialized with #{@value} at address #{@address}"
     end
 
+    def self.reset!
+      @@label_table = {}
+      @@current_address = 0
+    end
+
     def append_value(value, wtype)
       @value << value
       if value.is_a?(String) 

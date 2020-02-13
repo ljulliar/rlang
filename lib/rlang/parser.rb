@@ -16,6 +16,7 @@ require_relative '../utils/log'
 require_relative './parser/wtype'
 require_relative './parser/wtree'
 require_relative './parser/wnode'
+require_relative './parser/ivar'
 require_relative './parser/cvar'
 require_relative './parser/lvar'
 require_relative './parser/marg'
@@ -49,18 +50,32 @@ module Rlang::Parser
 
     attr_accessor :wgenerator, :source, :config
 
-    def initialize(wgenerator)
+    def initialize(wgenerator, options={})
       @wgenerator = wgenerator
       # LIFO of parsed files (stacked by require)
       @requires = []
-      config_init
+      config_init(options)
+      logger.level = Kernel.const_get("Logger::#{@config[:log_level].upcase}")
+      logger.formatter = proc do |severity, datetime, progname, msg|
+        loc = caller_locations[3] # skip over the logger call itself
+        "#{severity[0]}: #{File.basename(loc.path)}:#{loc.lineno}##{loc.label} > #{msg}\n"
+      end
+      # reset all persistent objects
+      # TODO: change the design so those objects are 
+      # stored with the parser instance and not in a
+      # class variable
+      Global.reset!
+      Export.reset!
+      DAta.reset!
     end
 
-    def config_init
+    def config_init(options)
       @config = {}
       @config[:LOADED_FEATURES] = []
-      @config[:LOAD_PATH] = ''
+      @config[:LOAD_PATH] = []
       @config[:__FILE__] = ''
+      @config[:log_level] = 'FATAL'
+      @config.merge!(options)
     end
 
     # Note : this method can be called recursively
@@ -91,9 +106,9 @@ module Rlang::Parser
       end
     end
 
-    def parse(source)
+    def parse(source, wnode=nil)
       ast = ::Parser::CurrentRuby.parse(source)
-      parse_node(ast, @wgenerator.root) if ast
+      parse_node(ast, wnode || @wgenerator.root) if ast
     end
 
     # Parse Ruby AST node and generate WAT
@@ -125,6 +140,9 @@ module Rlang::Parser
       when :casgn
         wn = parse_casgn(node, wnode, keep_eval)
 
+      when :ivasgn
+        wn = parse_ivasgn(node, wnode, keep_eval)
+
       when :cvasgn
         wn = parse_cvasgn(node, wnode, keep_eval)
 
@@ -140,8 +158,8 @@ module Rlang::Parser
       when :lvar
         wn = parse_lvar(node, wnode, keep_eval)
 
-      when :ivar, :ivasgn
-        raise "Instance variable not supported"
+      when :ivar
+        wn = parse_ivar(node, wnode, keep_eval)
 
       when :cvar
         wn = parse_cvar(node, wnode, keep_eval)
@@ -237,12 +255,19 @@ module Rlang::Parser
       raise "expecting a constant for class name (got #{const_node})" \
         unless const_node.type == :const
 
+      # create the class wnode
       wn_class = @wgenerator.klass(wnode, const_node.children.last)
+
+      # Parse the body of the class
       parse_node(body_node, wn_class) if body_node
 
-      # now that we finished parsing the class node
-      # process the class attributes if any
-      @wgenerator.attributes(wn_class)
+      # We finished parsing the class body so
+      # 1) generate the wnodes for the new/initialize function
+      # 2) generate the wnodes for accessing attributes
+      @wgenerator.def_initialize(wn_class) # generate **BEFORE** new
+      @wgenerator.def_new(wn_class)
+      @wgenerator.def_wattr(wn_class)
+
       return wn_class
     end
 
@@ -270,6 +295,11 @@ module Rlang::Parser
     # s(:op_asgn,
     #    s(:gvasgn, :$MYGLOBAL), :-, s(:lvar, :nbytes))
     #
+    # Example (instance var)
+    # @stack_ptr -= nbytes
+    # ---
+    # s(:op_asgn,
+    #    s(:ivasgn, :@stack_ptr), :-, s(:lvar, :nbytes))
     #
     # Example (setter/getter)
     # p.size -= nunits
@@ -344,6 +374,44 @@ module Rlang::Parser
         # Create the var getter node as a child of operator node
         wn_var_get = @wgenerator.lvar(wn_op, lvar)
 
+      # Instance variable case
+      # Example (instance var)
+      # @stack_ptr -= nbytes
+      # ---
+      # s(:op_asgn,
+      #    s(:ivasgn, :@stack_ptr), :-, s(:lvar, :nbytes))
+      when :ivasgn
+        var_asgn_node, op, exp_node = *node.children
+        var_name = var_asgn_node.children.last
+
+        # To op_asgn to work, ivar must already be declared
+        wattr = wnode.find_ivar(var_name)
+        raise "Unknown instance variable #{var_name}" unless wattr
+
+        # Instance variable op_asgn case is actually like
+        # the getter/setter case below where the receiver
+        # wnode is self
+        wn_recv = parse_self(node, wnode)
+
+        # Create the top level variable setter node
+        wn_var_set = @wgenerator.ivasgn(wnode, wn_recv, wattr)
+
+        # Second argument of the setter is the operator wnode
+        # Create it with wtype :none for now. We'll fix that
+        # with the operands call later on
+        wn_op = @wgenerator.operator(wn_var_set, op)
+
+        # now create the getter node as the first child of the
+        # operator
+        wn_var_get = @wgenerator.ivar(wnode, wn_recv, wattr)
+
+        # If the setter returns something and last evaluated value
+        # must be ignored then drop it
+        unless keep_eval && !wn_var_set.wtype.blank?
+          @wgenerator.drop(wnode)
+          #@wgenerator.call(wnode, wn_recv.wtype.name, "#{method_name}", :instance)
+        end
+
       # setter/getter case
       # Example (setter/getter)
       # p.size -= nunits
@@ -360,13 +428,13 @@ module Rlang::Parser
         # above to get its wtype
         # Force keep_eval to true whatever upper level 
         # keep_eval says
-        wn_recv_node = parse_node(recv_node, wnode, true)
+        wn_recv = parse_node(recv_node, wnode, true)
 
         # Create the top level setter call
-        wn_var_set = @wgenerator.call(wnode, wn_recv_node.wtype.name, "#{method_name}=", :instance)
+        wn_var_set = @wgenerator.call(wnode, wn_recv.wtype.name, "#{method_name}=", :instance)
 
         # First argument of the setter must be the recv_node
-        wn_recv_node.reparent_to(wn_var_set)
+        wn_recv.reparent_to(wn_var_set)
 
         # Second argument of the setter is the operator wnode
         # Create it with wtype :none for now. We'll fix that
@@ -384,7 +452,7 @@ module Rlang::Parser
         # must be ignored then drop it
         unless keep_eval && !wn_var_set.wtype.blank?
           @wgenerator.drop(wnode)
-          #@wgenerator.call(wnode, wn_recv_node.wtype.name, "#{method_name}", :instance)
+          #@wgenerator.call(wnode, wn_recv.wtype.name, "#{method_name}", :instance)
         end
       else
         raise "op_asgn not supported for #{node.children.first}"
@@ -472,7 +540,6 @@ module Rlang::Parser
       else
         # If we are at root or in class scope
         # then it is a global variable initialization
-        raise "Global #{gv_name} already declared" if gvar
         raise "Global op_asgn can only happen in method scope" unless exp_node
         # In the class or root scope 
         # it can only be a Global var **declaration**
@@ -486,10 +553,59 @@ module Rlang::Parser
         raise "Global initializer can only be a straight number" \
           unless wn_exp.const?
         wnode.remove_child(wn_exp)
-        gvar = Global.new(gv_name, wn_exp.wtype, wn_exp.wargs[:value])
+        if gvar
+          gvar.value = wn_exp.wargs[:value]
+        else
+          gvar = Global.new(gv_name, wn_exp.wtype, wn_exp.wargs[:value])
+        end
         # Do not export global for now
         #gvar.export! if self.config[:export_all]
       end
+    end
+
+
+    # Example
+    # @stack_ptr = 10 + nbytes
+    # ---
+    # s(:ivasgn, :@stack_ptr, s(:send, s(:int, 10), :+, s(:lvar, :nbytes)))
+    def parse_ivasgn(node, wnode, keep_eval)
+      iv_name, exp_node = *node.children
+
+      raise "Instance variable #{iv_name} can only be used in method scope" \
+        unless wnode.in_method_scope? 
+
+      unless (wattr = wnode.find_ivar(iv_name))
+        # first ivar occurence, create it 
+        wattr = wnode.create_ivar(iv_name)
+        new_ivar = true
+      end
+
+      # ivar assignment is like calling the corresponding
+      # setter on self. So create self wnode first
+      wn_recv = parse_self(node, wnode)
+      wn_ivasgn = @wgenerator.ivasgn(wnode, wn_recv, wattr)
+
+      # Second argument is the expression
+      wn_exp = parse_node(exp_node, wn_ivasgn)
+
+      if new_ivar
+        # type cast the wattr and its ivar to the wtype 
+        # of the expression as this its first occurence
+        logger.debug "Setting new ivar #{wattr.name} wtype to #{wn_exp.wtype.name}"
+        wattr.wtype = wn_exp.wtype
+      else
+        # if ivar already exists then type cast the 
+        # expression to the wtype of the existing ivar
+        logger.debug "Casting exp. wtype #{wn_exp.wtype} to existing ivar #{wattr.name} wtype #{wattr.wtype}"
+        @wgenerator.cast(wn_exp, wattr.wtype, false)
+      end
+
+      # If the setter returns something and last evaluated value
+      # must be ignored then drop it
+      unless keep_eval && !wn_ivasgn.wtype.blank?
+        @wgenerator.drop(wnode)
+      end
+      return wn_ivasgn
     end
 
     # Example
@@ -600,6 +716,25 @@ module Rlang::Parser
       # Drop last evaluated result if asked to
       @wgenerator.drop(wnode) unless keep_eval
       return wn_gvar
+    end
+
+    # Example
+    # ... @stack_ptr
+    # ---
+    # ... s(:ivar, :@stack_ptr)
+    def parse_ivar(node, wnode, keep_eval)
+      raise "Instance variable can only be accessed in method scope" \
+        unless wnode.in_method_scope?
+      iv_name, = *node.children
+      if (wattr = wnode.find_ivar(iv_name))
+        wn_recv = parse_self(node, wnode)
+        wn_ivar = @wgenerator.ivar(wnode, wn_recv, wattr)
+      else
+        raise "unknown instance variable #{cv_name}"
+      end
+      # Drop last evaluated result if asked to
+      @wgenerator.drop(wnode) unless keep_eval
+      return wn_ivar
     end
 
     # Example
@@ -730,9 +865,9 @@ module Rlang::Parser
       logger.debug "recv_node: #{recv_node}\nmethod_name: #{method_name}"
 
       # create corresponding func node
-      method = wnode.find_or_create_method(method_name, nil, :class)
+      method = wnode.find_or_create_method(method_name, nil, nil, :class)
       method.export! if (@@export || self.config[:export_all])
-      logger.debug "Method object : #{method.inspect}"
+      logger.debug "Method object : #{method}"
       wn_method = @wgenerator.class_method(wnode, method)
       # collect method arguments
       parse_args(arg_nodes, wn_method)
@@ -778,11 +913,10 @@ module Rlang::Parser
       logger.debug "method_name: #{method_name}"
 
       # create corresponding func node
-      method = wnode.find_or_create_method(method_name, nil, :instance)
+      method = wnode.find_or_create_method(method_name, nil, nil, :instance)
       method.export! if (@@export || self.config[:export_all])
-      logger.debug "Method object : #{method.inspect}"
+      logger.debug "Method object : #{method}"
       wn_method = @wgenerator.instance_method(wnode, method)
-      # add a receiver argument
 
       # collect method arguments
       parse_args(arg_nodes, wn_method)
@@ -821,7 +955,10 @@ module Rlang::Parser
         logger.debug "Absolute path detected"
         extensions.each do |ext|
           full_path_file = file+ext
-          break if File.file?(full_path_file)
+          if File.file?(full_path_file)
+            logger.debug "Found required file: #{full_path_file}"
+            break
+          end
         end
       else
         case file
@@ -1219,13 +1356,18 @@ module Rlang::Parser
         raise "result directive expects a symbol argument (got #{result_type})" \
           unless result_type.is_a? Symbol
         wnode.method_wnode.wtype = WType.new(result_type)
-        logger.debug "result_type #{result_type} updated for method #{wnode.method_wnode.method.inspect}"
+        logger.debug "result_type #{result_type} updated for method #{wnode.method_wnode.method}"
       elsif wnode.in_class_scope?
         cn_name,  = *node.children[2]
         mn_name,  = *node.children[3]
         result_type, = *node.children[4]
+        raise "result directive expects a symbol argument (got #{result_type}) in node #{node}" \
+          unless result_type.is_a? Symbol
+        # Create class and method objects as we known we'll
+        # be calling them later on
+        WNode.root.find_or_create_class(cn_name)
         method_type = (mn_name[0] == '#' ? :instance : :class)
-        (mwn = wnode.find_or_create_method(mn_name, cn_name, method_type)).wtype = WType.new(result_type)
+        (mwn = wnode.find_or_create_method(mn_name, cn_name, nil, method_type)).wtype = WType.new(result_type)
         logger.debug "result_type #{mwn.wtype} for method #{mwn.name}"
       else
         raise "result declaration not supported #{wn.scope} scope"
@@ -1286,7 +1428,8 @@ module Rlang::Parser
       wattr_types.each do |name, wtype|
         if (wattr = wnode.find_wattr(name))
           logger.debug "Setting wattr #{name} type to #{wtype}"
-          wattr.wtype = WType.new(wtype)
+          # TODO find a way to update both wtype at once
+          wattr.wtype = wattr.ivar.wtype = WType.new(wtype)
         else
           raise "Unknown class attribute #{name} in #{wnode}"
         end          
@@ -1504,14 +1647,12 @@ module Rlang::Parser
         raise "Can only call method class on self or class objects (got #{recv_node} in node #{node})"
       end
       logger.debug "...#{class_name}::#{method_name}"
-      if method_name == :new
-        raise "Cannot instantiate object in scope #{wnode.scope} on #{node}" \
-         unless wnode.in_class_scope?
+      if method_name == :new && wnode.in_class_scope?
         # This is class object instantiation. Statically 
         # allocated though. So it can only happen in the
         # class scope for a class variable or a constant
         # Returns a wnode with a i32.const containing the address
-        wn_addr = @wgenerator.new(wnode, class_name)
+        wn_addr = @wgenerator.static_new(wnode, class_name)
         return wn_addr
       else
         wn_call = @wgenerator.call(wnode, class_name, method_name, :class)
@@ -1578,14 +1719,16 @@ module Rlang::Parser
     # when sis an object instance (not a class instance)
     def parse_self(node, wnode)
       if  wnode.in_instance_method_scope?
-        wn = @wgenerator._self(wnode)
+        wn = @wgenerator._self_(wnode)
         logger.debug "self in instance method scope"
       elsif wnode.in_class_method_scope?
         # Nothing to do just return nil
-        logger.debug "self in class method scope"
+        # TODO: not sure this is the right thing to do. Double check
+        logger.debug "self in class method scope. Nothing to do."
       elsif wnode.in_class_scope?
         # Nothing to do just return nil
-        logger.debug "self in class definition scope"
+        # TODO: not sure this is the right thing to do. Double check
+        logger.debug "self in class definition scope. Nothing to do."
       else
         raise "Don't know what self means in this context: #{wnode}"
       end 
