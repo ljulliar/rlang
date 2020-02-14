@@ -476,23 +476,54 @@ module Rlang::Parser
     #   (int 2000))
     def parse_casgn(node, wnode, keep_eval)
       class_name_node, constant_name, exp_node = *node.children
-      raise "dynamic constant assignment" unless wnode.in_class_scope?
-      raise "constant initialization can only take a number" unless exp_node.type == :int
-
+#      raise "dynamic constant assignment" unless wnode.in_class_scope?
       unless class_name_node.nil?
         raise "constant assignment with class path not supported (got #{class_name_node})"
       end
-      if wnode.find_const(constant_name)
-        raise "constant #{constant_name} already initialized"
+
+      if wnode.in_method_scope?
+        # if exp_node is nil then this is the form of 
+        # :casgn that comes from op_asgn
+        if exp_node        
+          if const.nil?
+            # first constant occurence
+            # type cast the constant to the wtype of the expression
+            const = wnode.create_const(constant_name, nil, 0, WType::DEFAULT)
+            wn_casgn = @wgenerator.casgn(wnode, const)
+            wn_exp = parse_node(exp_node, wn_casgn)
+            const.wtype = wn_exp.wtype
+          else
+            # if const already exists then type cast the 
+            # expression to the wtype of the existing const
+            wn_casgn = @wgenerator.casgn(wnode, const)
+            wn_exp = parse_node(exp_node, wn_casgn)
+            @wgenerator.cast(wn_exp, const.wtype, false)
+            logger.warning "Already initialized constant #{const.name}"
+          end
+        else
+          raise "Constant #{const_name} not declared before" unless const
+          wn_casgn = @wgenerator.casgn(wnode, const)
+        end
+        # to mimic Ruby push the constant value on stack if needed
+        @wgenerator.const(wnode, const) if keep_eval
+        return wn_casgn
+
+      elsif wnode.in_class_scope? || wnode.in_root_scope?
+        # If we are in class scope
+        # then it is a class variable initialization
+        # Parse the expression node to see if it's a ixx.const
+        # in the end but get rid of it then because we are not
+        # executing this code. Just statically initiliazing the 
+        # const with the value
+        wn_exp = parse_node(exp_node, wnode)
+        raise "Constant initializer initializer can only be an int or a constant/class (got #{wn_exp}" \
+          unless wn_exp.const?
+        const = wnode.create_const(constant_name, nil, wn_exp.wargs[:value], wn_exp.wtype)
+        wnode.remove_child(wn_exp)
+        logger.debug "Constant #{constant_name} initialized with value #{const.value} and wtype #{const.wtype}"
+      else
+        raise "Constant can only be defined in method or class scope"
       end
-
-      # TODO: const are I32 hardcoded for now. Must find a way to 
-      # initialize I64 constant too
-      value = exp_node.children.last
-      const = wnode.create_const(constant_name, nil, value, WType::DEFAULT)
-
-      wn_casgn = @wgenerator.casgn(wnode, const)
-      return wn_casgn
     end
 
     # Example
@@ -537,7 +568,7 @@ module Rlang::Parser
         # to mimic Ruby push the variable value on stack if needed
         @wgenerator.gvar(wnode, gvar) if keep_eval
         return wn_gvasgn
-      else
+      elsif true #wnode.in_class_scope?
         # If we are at root or in class scope
         # then it is a global variable initialization
         raise "Global op_asgn can only happen in method scope" unless exp_node
@@ -550,7 +581,7 @@ module Rlang::Parser
         # Then remove the generated wnode because it is not for
         # execution. It is just to get the init value
         wn_exp = parse_node(exp_node, wnode)
-        raise "Global initializer can only be a straight number" \
+        raise "Global initializer can only be a int or a constant/class (got #{wn_exp})" \
           unless wn_exp.const?
         wnode.remove_child(wn_exp)
         if gvar
@@ -560,6 +591,8 @@ module Rlang::Parser
         end
         # Do not export global for now
         #gvar.export! if self.config[:export_all]
+      else
+        raise "Global can only be defined in method or class scope"
       end
     end
 
@@ -650,13 +683,13 @@ module Rlang::Parser
         # Parse the expression node to see if it's a ixx.const
         # in the end but get rid of it then because we are not
         # executing this code. Just statically initiliazing the 
-        #cvar with the value
+        # cvar with the value
         wn_exp = parse_node(exp_node, wnode)
-        raise "Class variable initializer can only be a straight number (got #{wn_exp}" \
+        raise "Class variable initializer can only be an int or a constant/class (got #{wn_exp}" \
           unless wn_exp.const?
         cvar = wnode.create_cvar(cv_name, wn_exp.wargs[:value], wn_exp.wtype)
         wnode.remove_child(wn_exp)
-        logger.debug "Class variable #{cv_name} initialzed with value #{cvar.value} and wtype #{cvar.wtype}"
+        logger.debug "Class variable #{cv_name} initialized with value #{cvar.value} and wtype #{cvar.wtype}"
       else
         raise "Class variable can only be defined in method or class scope"
       end
@@ -1568,7 +1601,7 @@ module Rlang::Parser
     def parse_send_method_lookup(node, wnode, keep_eval)
       recv_node = node.children[0]
       #method_name = node.children[1]
-      if wnode.in_class_scope? || wnode.in_class_method_scope?
+      if wnode.in_class_scope? || wnode.in_class_method_scope? || wnode.in_root_scope?
         if recv_node.nil? || recv_node.type == :self 
           return parse_send_class_method_call(node, wnode, keep_eval)
         elsif recv_node.type == :const
@@ -1585,10 +1618,10 @@ module Rlang::Parser
         end
       elsif wnode.in_instance_method_scope?
         if recv_node&.type == :const
-          const_name = recv_node.children.last
+          recv_name = recv_node.children.last
           # if this is a Constant, not a class
           # then it's actually an instance method call
-          if wnode.find_const(const_name)
+          if wnode.find_const(recv_name)
             return parse_send_instance_method_call(node, wnode, keep_eval)
           else
             return parse_send_class_method_call(node, wnode, keep_eval)
@@ -1647,7 +1680,7 @@ module Rlang::Parser
         raise "Can only call method class on self or class objects (got #{recv_node} in node #{node})"
       end
       logger.debug "...#{class_name}::#{method_name}"
-      if method_name == :new && wnode.in_class_scope?
+      if method_name == :new && (wnode.in_class_scope? || wnode.in_root_scope?)
         # This is class object instantiation. Statically 
         # allocated though. So it can only happen in the
         # class scope for a class variable or a constant

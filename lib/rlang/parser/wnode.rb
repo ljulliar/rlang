@@ -82,9 +82,14 @@ module Rlang::Parser
 
       # For root wnode
       @classes = [] # classes
-
+      # top level class needed only if const are
+      # defined at top level
+      # NOTE: can't use create_klass as it find_class
+      # which doesn't find root class ... endless loop!!
+    
       # For class wnode only
-      @klass = nil
+      @@klass = nil
+      self.klass = Klass.new(:Top__) if self.root?
 
       # For method wnode only
       @method = nil
@@ -196,6 +201,7 @@ module Rlang::Parser
       @klass = klass
       @klass.wnode = self
       WNode.root.classes << klass
+      klass
     end
 
     # Find class name in this node and up the tree
@@ -212,19 +218,27 @@ module Rlang::Parser
     # if no name given or lookup the matching class from
     # the root level if class name given
     def find_class(class_name)
-      logger.debug "looking for class #{class_name ? class_name : 'current'}"
+      logger.debug "looking for class #{class_name ? class_name : 'current'} 
+        in scope #{self.scope} at wnode #{self}"
       if class_name
-        c = WNode.root.classes.find { |c| c.name == class_name }
+        c = WNode.root.classes.find { |c| 
+          logger.debug "**** looking for class #{class_name} in class object #{c} / #{c.name}"; c.name == class_name }
       else
-        logger.debug "Looking for class wnode from wnode #{self} / ID: #{self.object_id} / 
-        type: #{self.type} / class_wnode ID #{self.class_wnode.object_id} / 
-        class_wnode #{self.class_wnode} /
-        self klass : #{self.klass} / 
-        self klass wtype : #{self.klass&.wtype} / "
-        c = self.class_wnode.klass
+        if self.in_root_scope?
+          # if at root level and no class name given
+          # then it's the top level class
+          c = self.class.root.klass
+        else
+          logger.debug "Looking for class wnode from wnode #{self} / ID: #{self.object_id} / 
+          type: #{self.type} / class_wnode ID #{self.class_wnode.object_id} / 
+          class_wnode #{self.class_wnode} /
+          self klass : #{self.klass} / 
+          self klass wtype : #{self.klass&.wtype} / "
+          c = self.class_wnode.klass
+        end
       end    
       if c
-        logger.debug "Found class #{c}"
+        logger.debug "Found class #{c.name} / #{c}"
       else
         logger.debug "Class #{class_name} not found"
       end
@@ -234,14 +248,9 @@ module Rlang::Parser
     # Create a Class object. **NOTE** the self
     # wnode must be the parent of the new class
     def create_class(class_name)
-      if (k = self.find_class(class_name))
-        raise "Cannot create class #{class_name} for wnode #{self} as it already exists!!"
-      else
-        wnc = WNode.new(:class, self)
-        wnc.klass = Klass.new(class_name)
-        logger.debug "Created class #{wnc.klass} under wnode #{self} / id: #{self.object_id}"
-        logger.debug "k inspection: #{wnc.klass}"
-      end
+      wnc = WNode.new(:class, self)
+      wnc.klass = Klass.new(class_name)
+      logger.debug "Created class #{wnc.klass} under wnode #{self} / id: #{self.object_id}"
       wnc.klass
     end
 
@@ -251,23 +260,31 @@ module Rlang::Parser
 
     # create a constant 
     def create_const(c_name, class_name, value, wtype)
-      class_name ||= self.class_name
+      k = find_class(class_name)
+      logger.debug "Creating constant #{c_name} in class #{k&.name} / wtype: #{wtype} at wnode #{self.class_wnode}..."
       if (cn = self.class_wnode)
-        cn.klass.consts << (const = Const.new(class_name, c_name, value, wtype))
+        cn.klass.consts << (const = Const.new(k.name, c_name, value, wtype))
       else
         raise "No class found for class constant #{const}"
       end
       const
     end
 
-    # Look for constant in the appropriate class wnode
-    # (it can be the current class or another class)
+    # Look for constant 
     def find_const(c_name, class_name=nil)
+      logger.debug "looking for constant #{c_name} in class #{class_name ? class_name : 'current'} from wnode #{self}..."
       k = find_class(class_name)
-      raise "Can't find parent class for constant #{c_name}" unless k
-      class_name = k.name
-      logger.debug "looking for const #{c_name} in class #{class_name} at wnode #{self.class_wnode}..."
-      k.consts.find { |c| c.class_name == class_name && c.name == c_name }
+      # Look for the constant both in current class and a roor class level
+      const = [k, @@root.klass].map(&:consts).flatten.find do |c| 
+        logger.debug "exploring constant #{c} / name: #{c.name} / class_name: #{c.class_name}";
+        c.name == c_name
+      end
+      if const
+        logger.debug "Constant #{c_name} found in class #{k.name} at wnode #{k.wnode}..."
+      else
+        logger.debug "Constant #{c_name} not found in class #{k.name} or at top level..."
+      end
+      const
     end
 
     def find_or_create_const(c_name, class_name, value, wtype)
@@ -380,6 +397,7 @@ module Rlang::Parser
 
     # method_type is either :instance or :class
     def find_method(method_name, class_name, method_type)
+      logger.debug "looking for method #{method_name} in class name #{class_name} from wnode #{self}"
       k = self.find_class(class_name)
       raise "Couldn't find class wnode for class_name #{class_name}" unless k
       if method_type == :class
@@ -463,7 +481,7 @@ module Rlang::Parser
     end
 
     def in_root_scope?
-      self.root? || self.parent.root?
+      self.root? || (self.parent.root? && !in_class_scope?)
     end
 
     def method?
@@ -471,7 +489,7 @@ module Rlang::Parser
     end
 
     def class?
-      self.type == :class
+      self.type == :class || self.type == :root 
     end
 
     # format the wnode and tree below

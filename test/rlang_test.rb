@@ -92,6 +92,14 @@ class RlangTest < Minitest::Test
     assert_equal 1070503, @instance.exports.send(@wfunc, 6)
   end
 
+  def test_call_instance_method_on_const
+    assert_equal 1070503, @instance.exports.send(@wfunc, 6)
+  end
+
+  def test_call_instance_method_on_global
+    assert_equal 1070503, @instance.exports.send(@wfunc, 6)
+  end
+
   def test_call_method_recursive
     assert_equal 28657, @instance.exports.send(@wfunc, 23)
   end
@@ -134,6 +142,10 @@ class RlangTest < Minitest::Test
 
   def test_class_var_set_in_method
     assert_equal 200, @instance.exports.send(@wfunc)
+  end
+
+  def test_constant_init
+    assert_equal 30500, @instance.exports.send(@wfunc)
   end
 
   def test_constant_in_class
@@ -201,7 +213,7 @@ class RlangTest < Minitest::Test
   end
   
   def test_global_var_init
-    assert_equal 2, @instance.exports.send(@wfunc)
+    assert_equal 3050700, @instance.exports.send(@wfunc)
   end
   
   def test_global_var_init_twice

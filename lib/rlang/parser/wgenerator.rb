@@ -225,11 +225,12 @@ module Rlang::Parser
       wn    
     end
 
-    # Set class variable
-    # Constant assignment doesn't generate any code
-    # A Data object is instantiated and initialized
-    # when the Const object is created in parser
+    # Set constant
     def casgn(wnode, const)
+      (wn = WNode.new(:insn, wnode)).wtype = const.wtype
+      wn.c(:store, wtype: const.wtype)
+      WNode.new(:insn, wn).c(:addr, value: const.address)
+      wn
     end
 
     # Get class variable
