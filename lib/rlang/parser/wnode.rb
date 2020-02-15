@@ -401,9 +401,9 @@ module Rlang::Parser
       k = self.find_class(class_name)
       raise "Couldn't find class wnode for class_name #{class_name}" unless k
       if method_type == :class
-        method = k.methods.find { |m| m.name == method_name && m.class_name == class_name && m.class? }
+        method = k.methods.find { |m| m.name == method_name && m.class_name == k.name && m.class? }
       elsif method_type == :instance
-        method = k.methods.find { |m| m.name == method_name && m.class_name == class_name && m.instance? }
+        method = k.methods.find { |m| m.name == method_name && m.class_name == k.name && m.instance? }
       else
         raise "Unknown method type : #{method_type.inspect}"
       end
