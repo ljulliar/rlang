@@ -2,11 +2,13 @@
 
 Rlang is meant to generate fast and uncluttered [WebAssembly](https://webassembly.org) code from the comfort of the Ruby language.
 
-Rlang is two things: 1) a subset of the Ruby language and 2) a **compiler** transforming this Ruby subset in a valid, fully runnable and native WebAssembly module.
+Rlang is actually two things: 1) a supported subset of the Ruby language and 2) a **compiler** transforming this Ruby subset in a valid, fully runnable and native WebAssembly module.
 
 Rlang can be seen as a foundational language that can help you quickly develop and debug high performance WebAssembly modules. For the rationale behind the creation of Rlang see [below](#why-rlang).
 
-What you'll find in the current version is a first implementation of Rlang. It will improve over time, with more facilities and probably more Ruby features but always with the goal to generate crisp and uncluttered WAT code.
+This is still a young project but Rlang has already been successfully tested with some real code such as the dynamic memory allocator provided with the Rlang library. It will keep mproving over time, always with the goal of generating crisp and uncluttered WAT code.
+
+If you want to help with Rlang see [How you can help](#how-you-can-help).
 
 ## Dependencies
 
@@ -76,6 +78,14 @@ Sure I could have written this VM in any of the language that can already be com
 Yes I hear you: Rlang is already the name of the R language so why use that name and aren't you introducing some confusion? Well for one I couldn't resist using that name to honor software engineering history (see below) and because, after all, the intersection between the Ruby/WebAssembly community and the R language community focused on data processing and machine learning must be quite small to say the least.
 
 The name **Rlang** itself is  a tribute to [Slang](http://wiki.squeak.org/squeak/slang), a subset of the Smalltalk language that can directly translate to C. It was created in 1995 to bootstrap the development of the virtual machine of Squeak, an open-source Smalltalk programming system. I highly encourage anyone interested in the history and the technology of virtual machines to read both the [Back to the future](http://www.vpri.org/pdf/tr1997001_backto.pdf) article as well as the now legendary [Blue Book](http://stephane.ducasse.free.fr/FreeBooks/BlueBook/Bluebook.pdf) explaining how the Smalltalk-80 Virtual Machine and Language were designed in the 80s. I would actually go as far as saying that you don't really know what (virtual) machines are until you have read this book :-)
+
+## How you can help
+* Test Rlang installation on different platforms (Linux, Mac, Windows) and different Ruby versions (Ruby 2.2 and above)
+* Write some real Rlang application code, compile it and test it.
+* Improve the documentation if you find it unclear or want to enrich it with further examples and tips
+* Growing the Rlang library that is still quite basic. For instance you can write the String class or the Array class,...). Just start with the the most popular methods in those classes.
+* If you feel like digging into the Rlang parser and Wasm code generator you can extend it with the support of Floats for instance
+* And of course writing tests for the parts of the code not yet covered is always welcome (running "rake test" also generates code coverage information)
 
 ## Credits
 A big thanks to:
