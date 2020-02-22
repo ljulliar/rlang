@@ -26,7 +26,9 @@ module Rlang::Parser
       local: 'local %{name} %{wasm_type}',
       call: 'call %{func_name}',
       store: '%{wasm_type}.store',
+      store_offset: '%{wasm_type}.store offset=%{offset}',
       load: '%{wasm_type}.load',
+      load_offset: '%{wasm_type}.load offset=%{offset}',
       local_get: 'local.get %{var_name}',
       local_set: 'local.set %{var_name}',
       global_get: 'global.get %{var_name}',
@@ -48,9 +50,9 @@ module Rlang::Parser
       br_if: 'br_if %{label}',
       br: 'br %{label}',
       inline: '%{code}',
-      wattr_reader: %q{func %{func_name} (param $_self_ i32) (result %{wtype})
+      wattr_getter: %q{func %{func_name} (param $_self_ i32) (result %{wtype})
   (%{wtype}.load offset=%{offset} (local.get $_self_))},
-      wattr_writer: %q{func %{func_name} (param $_self_ i32) (param %{wattr_name} %{wtype}) (result %{wtype})
+      wattr_setter: %q{func %{func_name} (param $_self_ i32) (param %{wattr_name} %{wtype}) (result %{wtype})
   (local.get %{wattr_name})
   (%{wtype}.store offset=%{offset} (local.get $_self_) (local.get %{wattr_name}))},
       class_size: %q{func %{func_name} (result %{wtype})
@@ -169,25 +171,37 @@ module Rlang::Parser
 
     # Remove child to current node
     def remove_child(wnode)
-      logger.debug "Removing #{wnode.object_id} from #{self.children.map(&:object_id)}"
-      wn = self.children.delete(wnode) do 
-        logger.error "Couldn't find wnode ID #{wnode.object_id} (#{wnode})"
-        raise
+      logger.debug "Removing #{wnode.object_id} from wnodes list #{self.children.map(&:object_id)} under parent #{self.parent.object_id}"
+      unless (wn = self.children.delete(wnode)) && wn == wnode
+        raise "Couldn't find wnode ID #{wnode.object_id} (#{wnode})"
       end
       wn.parent = nil
       #logger.debug "Removed #{wnode.object_id} from #{self.object_id} (children: #{self.children.map(&:object_id)})"
-      wn
+      wnode
     end
     alias :>> :remove_child
     
     # Reparent self node to another wnode
     def reparent_to(wnode)
-      return if self.parent == wnode
-      logger.debug "Reparenting #{self.object_id} to #{wnode.object_id}"
-      old_parent, new_parent = self.parent, wnode
-      new_parent << self
-      old_parent >> self if old_parent
+      unless self.parent == wnode
+        logger.debug "Reparenting #{self.object_id} from #{self.parent.object_id} to #{wnode.object_id}"
+        old_parent, new_parent = self.parent, wnode
+        old_parent >> self if old_parent
+        new_parent << self
+      end
+      self
     end
+
+      # Reparent all children wnodes to another wnode
+      # (in the same order)
+      # WARNING!! Do not use self.children.each { } to
+      # reparent because we are modifying children list
+      # as we go
+      def reparent_children_to(wnode)
+        wnc = self.children
+        wnc.count.times { wnc.first.reparent_to(wnode) }
+        self
+      end
 
     # insert a blank wnode above self, so between self wnode 
     # and its parent (self -> parent becomes self -> wn -> parent)
@@ -315,18 +329,18 @@ module Rlang::Parser
     def create_ivar(iv_name, wtype=WType::DEFAULT)
       if (cn = self.class_wnode)
         logger.debug "creating ivar #{iv_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
-        cn.klass.wattrs << (wattr = WAttr.new(cn, iv_name, wtype))
+        cn.klass.ivars << (ivar = IVar.new(cn, iv_name, wtype))
       else
         raise "No class found for instance variable #{iv_name}"
       end
-      wattr
+      ivar
     end
 
     def find_ivar(iv_name, class_name=nil)
       klass = find_class(class_name)
       raise "Can't find parent class for ivar #{iv_name}" unless klass
       logger.debug "looking for ivar #{iv_name} in class #{class_name} at wnode #{self.class_wnode}..."
-      self.class_wnode.klass.wattrs.find { |wa| wa.ivar.class_name == klass.name && wa.ivar.name == iv_name }
+      self.class_wnode.klass.ivars.find { |iv| iv.class_name == klass.name && iv.name == iv_name }
     end
 
     def find_or_create_ivar(iv_name)
@@ -386,20 +400,19 @@ module Rlang::Parser
       end
       if (cn = self.class_wnode)
         class_name ||= cn.klass.name
-        cn.klass.methods << (method = MEthod.new(method_name, class_name, wtype))
+        cn.klass.methods << (method = MEthod.new(method_name, class_name, wtype, method_type))
       else
         raise "No class wnode found to create method #{method_name}"
       end
-      method_type == :class ? method.class! : method.instance!
       logger.debug "Created MEthod: #{method}"
       method
     end
 
     # method_type is either :instance or :class
     def find_method(method_name, class_name, method_type)
-      logger.debug "looking for method #{method_name} in class name #{class_name} from wnode #{self}"
+      logger.debug "looking for #{method_type} method '#{method_name}' in class name '#{class_name}' from wnode #{self}"
       k = self.find_class(class_name)
-      raise "Couldn't find class wnode for class_name #{class_name}" unless k
+      return nil unless k
       if method_type == :class
         method = k.methods.find { |m| m.name == method_name && m.class_name == k.name && m.class? }
       elsif method_type == :instance
@@ -408,9 +421,9 @@ module Rlang::Parser
         raise "Unknown method type : #{method_type.inspect}"
       end
       if method
-        logger.debug "Found MEthod: #{method}"
+        logger.debug "Found #{method_type} MEthod: #{k.name},#{method}"
       else
-        logger.debug "Couldn't find MEthod: #{k.name},#{method_name}"
+        logger.debug "Couldn't find #{method_type} MEthod: #{k.name},#{method_name}"
       end
       method
     end

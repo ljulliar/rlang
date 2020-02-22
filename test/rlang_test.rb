@@ -329,8 +329,12 @@ class RlangTest < Minitest::Test
     assert_equal 1, @instance.exports.send(@wfunc)
   end    
 
+  def test_opasgn_instance_method
+    assert_equal 1110, @instance.exports.send(@wfunc)
+  end
+
   def test_opasgn_instance_var
-    assert_equal 900, @instance.exports.send(@wfunc)
+    assert_equal 1400, @instance.exports.send(@wfunc)
   end
 
   def test_opasgn_local_var

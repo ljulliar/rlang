@@ -50,6 +50,8 @@ module Rlang::Parser
     :'!'   => :eqz
   }
 
+  ALL_OPS_MAP = [*ARITHMETIC_OPS_MAP, *RELATIONAL_OPS_MAP, *BOOLEAN_OPS_MAP, *UNARY_OPS_MAP].to_h
+
   # Matrix of how to cast a WASM type to another
   CAST_OPS = {
     I32: { I32: :cast_nope, I64: :cast_extend, F32: :cast_notyet, F64: :cast_notyet, Class: :cast_wtype, none: :cast_error},
@@ -59,6 +61,9 @@ module Rlang::Parser
     Class: { I32: :cast_wtype, I64: :cast_extend, F32: :cast_error, F64: :cast_error, Class: :cast_wtype, none: :cast_error},
     none: { I32: :cast_error, I64: :cast_error, F32: :cast_error, F64: :cast_error, Class: :cast_error, none: :cast_error},
   }
+
+  # Rlang class size method name
+  SIZE_METHOD = :_size_
 
   # new template when object size > 0
   NEW_TMPL = %q{
@@ -71,7 +76,7 @@ module Rlang::Parser
   end
   }
 
-  # new template when object size iz 0 (no instance var)
+  # new template when object size is 0 (no instance var)
   # use 0 as the _self_ address in memory. It should never
   # be used anyway
   NEW_ZERO_TMPL = %q{
@@ -91,6 +96,11 @@ module Rlang::Parser
   end
   }
 
+  # Dynamically allocate a string object
+  STRING_NEW_TMPL = %q{
+    String.new(%{ptr}, %{length})
+  }
+
   # Generate the wasm nodes and tree structure
   # ***IMPORTANT NOTE***
   # Unless otherwise stated all methods receive
@@ -106,6 +116,7 @@ module Rlang::Parser
       @parser = parser
       @root = WTree.new().root
       @new_count = 0
+      @static_count = 0
     end
 
     def klass(wnode, class_name)
@@ -118,22 +129,47 @@ module Rlang::Parser
       k.wnode
     end
 
+    # Postprocess ivars
+    # (called at end of class parsing)
+    def ivars_setup(wnode)
+      wnc = wnode.class_wnode
+      raise "Cannot find class for attributes definition!!" unless wnc
+      klass = wnc.klass
+      logger.debug "Postprocessing ivars for class #{klass.name}..."
+      klass.ivars.each do |iv|
+        iv.offset = klass.offset
+        logger.debug "... ivar #{iv.name} has offset #{iv.offset}"
+        # Update offset for next ivar
+        klass.offset += iv.size
+      end
+    end
+
+    # generate code for class attributes
+    # (called at end of class parsing)
     def def_wattr(wnode)
       wnc = wnode.class_wnode
-      # Process each declared attribute
-      offset = 0
-      wnc.klass.wattrs.each do |wa|
-        logger.debug("Generating accessors for attribute #{wnc.klass.name}\##{wa.name}")
+      raise "Cannot find class for attributes definition!!" unless wnc
+      # Process each declared class attribute
+      wnc.klass.wattrs.each do |wattr|
+        logger.debug("Generating accessors for attribute #{wnc.klass.name}\##{wattr.name}")
         # Generate getter and setter methods wnode
-        (wa.setter.wnode = wattr_setter(wnc, wa, offset)) unless wa.setter.wnode
-        (wa.getter.wnode = wattr_getter(wnc, wa, offset)) unless wa.getter.wnode
-        # Update offset
-        offset += wa.wtype.size
+        # unless method already implemented by user
+        unless wattr.setter.implemented?
+          wattr.setter.wnode = self.wattr_setter(wnc, wattr)
+        else
+          logger.debug "Attribute setter #{wattr.setter.name} already defined. Skipping"
+        end
+        unless wattr.getter.implemented?
+          wattr.getter.wnode = self.wattr_getter(wnc, wattr)
+        else
+          logger.debug "Attribute getter #{wattr.setter.name} already defined. Skipping"
+        end
       end
 
       # Also generate the Class::_size_ method
-      # always (needed by Object.allocate)
-      size_method = wnc.find_or_create_method(:_size_, wnc.klass.name, WType::DEFAULT, :class )
+      # (needed for dynamic memory allocation
+      #  by Object.allocate)
+      size_method = wnc.find_or_create_method(SIZE_METHOD, wnc.klass.name, WType::DEFAULT, :class)
       unless size_method.wnode
         logger.debug("Generating #{size_method.class_name}\##{size_method.name}")
         wns = WNode.new(:insn, wnc, true)
@@ -145,22 +181,22 @@ module Rlang::Parser
     end
 
     # Generate attribute setter method wnode
-    def wattr_setter(wnode, wattr, offset)
+    def wattr_setter(wnode, wattr)
       wnc = wnode.class_wnode
       wn_set = WNode.new(:insn, wnc, true)
-      wn_set.c(:wattr_writer, func_name: wattr.setter.wasm_name, 
+      wn_set.c(:wattr_setter, func_name: wattr.setter.wasm_name, 
             wattr_name: wattr.wasm_name, wtype: wattr.wasm_type,
-            offset: offset)
+            offset: wattr.offset)
       wn_set
     end
 
     # Generate attribute getter method wnode
-    def wattr_getter(wnode, wattr, offset)
+    def wattr_getter(wnode, wattr)
       wnc = wnode.class_wnode
       wn_get = WNode.new(:insn, wnc, true)
-      wn_get.c(:wattr_reader, func_name: wattr.getter.wasm_name, 
+      wn_get.c(:wattr_getter, func_name: wattr.getter.wasm_name, 
             wattr_name: wattr.wasm_name, wtype: wattr.wasm_type,
-            offset: offset)
+            offset: wattr.offset)
       wn_get
     end
 
@@ -274,15 +310,19 @@ module Rlang::Parser
     end
 
     # Set instance variable
-    # This is the same as calling the corresponding setter
-    def ivasgn(wnode, wnode_recv, wattr)
-      self.call_setter(wnode, wnode_recv, wattr)
+    def ivasgn(wnode, ivar)
+      (wn = WNode.new(:insn, wnode)).wtype = ivar.wtype
+      wn.c(:store_offset, wtype: ivar.wasm_type, offset: lambda { ivar.offset })
+      self._self_(wn)
+      wn
     end
 
     # Get instance variable. 
-    # This is the same as calling the corresponding getter
-    def ivar(wnode, wnode_recv, wattr)
-      self.call_getter(wnode, wnode_recv, wattr)
+    def ivar(wnode, ivar)
+      (wn = WNode.new(:insn, wnode)).wtype = ivar.wtype
+      wn.c(:load_offset, wtype: ivar.wasm_type, offset: lambda { ivar.offset })
+      self._self_(wn)
+      wn
     end
 
     # Set class variable
@@ -338,6 +378,52 @@ module Rlang::Parser
       (wn = WNode.new(:insn, wnode)).wtype = wtype
       wn.c(:const, wtype: wtype, value: value)
       wn
+    end
+
+    # Generate a phony node (generally used to create 
+    # a wnode subtree under the phony node and later
+    # reparent it to the proper place in the wtree)
+    def phony(wnode)
+      phony = WNode.new(:none, wnode)
+      phony
+    end
+
+    # Static string allocation
+    def string_static(string, data_label)
+      # Allocate string itself and the attributes
+      # of String object pointing to that string
+      data_stg = DAta.append(data_label.to_sym, string)
+      data_stg
+    end
+
+    # Static new string object
+    def string_static_new(wnode, string)
+      klass = wnode.find_class(nil)
+      data_label = "#{klass.name}_string_#{@static_count += 1}"
+      # Statically 
+      data_stg = self.string_static(string, data_label)
+      # align on :I32 boundary
+      DAta.align(4)
+      data_len = DAta.append("#{data_label}_len".to_sym, string.length, WType::DEFAULT)
+      data_ptr = DAta.append("#{data_label}_ptr".to_sym, data_stg.address, WType::DEFAULT)
+      # Generate address wnode
+      (wn_object_addr = WNode.new(:insn, wnode)).c(:addr, value: data_len.address)
+      wn_object_addr.wtype = WType.new(:String)
+      wn_object_addr
+    end
+
+    # Dynamic new string object
+    def string_dynamic_new(wnode, string)
+      klass = wnode.find_class(nil)
+      data_label = "#{klass.name}_string_#{@static_count += 1}"
+      data_stg = self.string_static(string, data_label)
+      string_new_source = STRING_NEW_TMPL % {
+        string: string,
+        ptr: data_stg.address,
+        length: string.length
+      }
+      #puts string_new_source;exit
+      wn_string = self.parser.parse(string_new_source, wnode)
     end
 
     # All the cast_xxxx methods below returns
@@ -403,27 +489,44 @@ module Rlang::Parser
     # TODO: simplify this complex method (possibly by using
     # a conversion table source type -> destination type)
     def cast(wnode, wtype, signed=false)
-      logger.debug "wnode: #{wnode}, wtype: #{wtype}"
+      logger.debug "Casting wnode: #{wnode}, wtype: #{wtype}, wnode ID: #{wnode.object_id}"
       src_type  = (wnode.wtype.native? ? wnode.wtype.name : :Class)
       dest_type = (wtype.native? ? wtype.name : :Class)
       cast_method = CAST_OPS[src_type] && CAST_OPS[src_type][dest_type] || :cast_error
-
+      logger.debug "Calling cast method: #{cast_method}"
       wn_cast_op = self.send(cast_method, wnode, wtype, signed)
-      logger.debug "After type cast: wnode: #{wn_cast_op}, wtype: #{wtype}"
+      logger.debug "After type cast: wnode: #{wn_cast_op}, wtype: #{wtype}, wnode ID: #{wn_cast_op.object_id}"
       wn_cast_op
+    end
+
+    # before generating native operator Wasm code check
+    # if the operator was overloaded
+    def send_method(wnode, method_name, wtype=WType.new(:none))
+      class_name = wtype.name
+      if wnode.find_method(method_name, class_name, :instance)
+        # it's an instance method call
+        logger.debug "Overloaded operator #{method_name} found in class #{class_name}"
+        wn_op = self.call(wnode, class_name, method_name, :instance)
+      else
+        # it's a native Wasm operator
+        if ALL_OPS_MAP.has_key? method_name
+          wn_op = self.native_operator(wnode, method_name, wtype)
+        else
+          raise "Unknown method '#{method_name}' in class #{class_name}"
+        end
+      end
+      wn_op
     end
 
     # just create a wnode for the WASM operator
     # Do not set wtype or a code template yet,
     # wait until operands type is known (see
     # operands below)
-    def operator(wnode, operator, wtype=WType.new(:none))
-      if (op = (ARITHMETIC_OPS_MAP[operator] || 
-                RELATIONAL_OPS_MAP[operator] ||
-                BOOLEAN_OPS_MAP[operator]    ||
-                UNARY_OPS_MAP[operator]  ))
+    def native_operator(wnode, operator, wtype=WType.new(:none))
+      if (op = ALL_OPS_MAP[operator])
         (wn_op = WNode.new(:insn, wnode)).c(:operator, operator: op)
         wn_op.wtype = wtype
+        logger.debug "Creating operator #{operator} wnode: #{wn_op}"
         wn_op
       else
         raise "operator '#{operator}' not supported"
@@ -433,8 +536,21 @@ module Rlang::Parser
     # finish the setting of the operator node and
     # attach operands
     def operands(wnode_op, wnode_recv, wnode_args)
+      logger.debug "Processing operands in operator wnode: #{wnode_op}..."
+      # Do not post process operands if the operator
+      # wnode is a call (= overloaded operator)
+      # and not a native operand
+      if wnode_op.template == :call
+        logger.debug "Doing nothing because it's a func call..."
+        return wnode_op
+      end
+
+      # A native operator only expects 0 (unary) or 1 (binary)
+      # argument in addition to the receiver 
       raise "only 0 or 1 operand expected (got #{wnode_args.count})" if wnode_args.count > 1
       op = wnode_op.wargs[:operator]
+      #wnode_recv = wnode_op.children[0]
+      #wnode_args = wnode_op.children[1..-1]
       # First find out the wtype that has precedence
       wtype = self.class.leading_wtype(wnode_recv, *wnode_args)
       
@@ -442,7 +558,7 @@ module Rlang::Parser
       logger.debug "leading type cast: #{wtype}"
 
       # Attach receiver and argument to the operator wnode
-      # type casting them if necessary
+      # type casting them if necessary    
       self.cast(wnode_recv, wtype).reparent_to(wnode_op)
       self.cast(wnode_args.first, wtype).reparent_to(wnode_op) unless wnode_args.empty?
 
@@ -456,8 +572,7 @@ module Rlang::Parser
         # if + or - operator then multiply arg by size of object
         if [:add, :sub].include? wnode_op.wargs[:operator]
           (wn_mulop = WNode.new(:insn, wnode_op)).c(:operator, operator: :mul)
-          WNode.new(:insn, wn_mulop).c(:const, 
-            value: lambda { wnode_recv.find_class(wnode_recv.wtype.name).size })
+          WNode.new(:insn, wn_mulop).c(:call, func_name: "$#{wnode_recv.wtype.name}::#{SIZE_METHOD}")
           wnode_args.first.reparent_to(wn_mulop)
         else
           # It's a relational operator. In this case
@@ -467,6 +582,7 @@ module Rlang::Parser
           wnode_op.wtype = WType::DEFAULT
         end
       end
+      logger.debug "Operands in operator wnode after postprocessing: #{wnode_op}..."
       wnode_op
     end
 

@@ -17,6 +17,9 @@ module Rlang::Parser
 
     attr_reader :label, :wtype, :address, :value
 
+    # NOTE: new and append only takes individual DAta values
+    # not an array of values
+    # TODO: fix DAta.new and DAta.append not accepting an array of values
     def initialize(label, value, wtype=WType::DEFAULT)
       raise "Data label '#{label}' already initialized" \
         if self.class.exist? label

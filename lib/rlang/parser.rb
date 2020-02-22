@@ -213,6 +213,9 @@ module Rlang::Parser
       when :false
         wn = parse_false(node, wnode, keep_eval)
 
+      when :str
+        wn = parse_string(node, wnode, keep_eval)
+
       else
         raise "Unknown node type: #{node.type} => #{node}"
       end
@@ -262,13 +265,14 @@ module Rlang::Parser
       parse_node(body_node, wn_class) if body_node
 
       # We finished parsing the class body so
-      # 1) generate the wnodes for the new/initialize function
-      # 2) generate the wnodes for accessing attributes
+      # 1) postprocess instance variables
+      # 2) generate wnodes for the new/initialize function
+      # 2) generate wnodes for attribute accessors
+      @wgenerator.ivars_setup(wn_class)
       @wgenerator.def_initialize(wn_class) # generate **BEFORE** new
       @wgenerator.def_new(wn_class)
       @wgenerator.def_wattr(wn_class)
-
-      return wn_class
+      wn_class
     end
 
     # TODO: the code for op_asgn is quite murky but I thought
@@ -320,9 +324,10 @@ module Rlang::Parser
     #     (int 1)))
     #
     def parse_op_asgn(node, wnode, keep_eval)
-      logger.debug "wnode: #{wnode}, keep_eval: #{keep_eval}"
+      op_asgn_type = node.children.first.type
+      logger.debug "op_asgn on #{op_asgn_type} / wnode: #{wnode}, keep_eval: #{keep_eval}"
 
-      case node.children.first.type
+      case op_asgn_type
       # Global variable case
       when :gvasgn
         var_asgn_node, op, exp_node = *node.children
@@ -336,7 +341,7 @@ module Rlang::Parser
         raise "Unknown global variable #{var_name}" unless gvar
 
         # Create the operator node (infer operator type from variable)
-        wn_op = @wgenerator.operator(wn_var_set, op, gvar.wtype)
+        wn_op = @wgenerator.send_method(wn_var_set, op, gvar.wtype)
         # Create the var getter node as a child of operator node
         wn_var_get = @wgenerator.gvar(wn_op, gvar)
 
@@ -353,7 +358,7 @@ module Rlang::Parser
         raise "Unknown class variable #{var_name}" unless cvar
 
         # Create the operator node (infer operator type from variable)
-        wn_op = @wgenerator.operator(wn_var_set, op, cvar.wtype)
+        wn_op = @wgenerator.send_method(wn_var_set, op, cvar.wtype)
         # Create the var getter node as a child of operator node
         wn_var_get = @wgenerator.cvar(wn_op, cvar)
       
@@ -370,7 +375,7 @@ module Rlang::Parser
         raise "Unknown local variable #{var_name}" unless lvar
 
         # Create the operator node (infer operator type from variable)
-        wn_op = @wgenerator.operator(wn_var_set, op, lvar.wtype)
+        wn_op = @wgenerator.send_method(wn_var_set, op, lvar.wtype)
         # Create the var getter node as a child of operator node
         wn_var_get = @wgenerator.lvar(wn_op, lvar)
 
@@ -381,36 +386,29 @@ module Rlang::Parser
       # s(:op_asgn,
       #    s(:ivasgn, :@stack_ptr), :-, s(:lvar, :nbytes))
       when :ivasgn
-        var_asgn_node, op, exp_node = *node.children
+        var_asgn_node, operator, exp_node = *node.children
         var_name = var_asgn_node.children.last
 
         # To op_asgn to work, ivar must already be declared
-        wattr = wnode.find_ivar(var_name)
-        raise "Unknown instance variable #{var_name}" unless wattr
-
-        # Instance variable op_asgn case is actually like
-        # the getter/setter case below where the receiver
-        # wnode is self
-        wn_recv = parse_self(node, wnode)
+        ivar = wnode.find_ivar(var_name)
+        raise "Unknown instance variable #{var_name}" unless ivar
 
         # Create the top level variable setter node
-        wn_var_set = @wgenerator.ivasgn(wnode, wn_recv, wattr)
+        wn_var_set = @wgenerator.ivasgn(wnode, ivar)
 
         # Second argument of the setter is the operator wnode
-        # Create it with wtype :none for now. We'll fix that
-        # with the operands call later on
-        wn_op = @wgenerator.operator(wn_var_set, op)
+        # Create it with wtype of receiver by default. We may
+        # change that wtype with the operands call later on
+        wn_op = @wgenerator.send_method(wn_var_set, operator, ivar.wtype)
 
-        # now create the getter node as the first child of the
+        # now create the getter node as a child of the
         # operator
-        wn_var_get = @wgenerator.ivar(wnode, wn_recv, wattr)
+        wn_var_get = @wgenerator.ivar(wn_op, ivar)
 
-        # If the setter returns something and last evaluated value
-        # must be ignored then drop it
-        unless keep_eval && !wn_var_set.wtype.blank?
-          @wgenerator.drop(wnode)
-          #@wgenerator.call(wnode, wn_recv.wtype.name, "#{method_name}", :instance)
-        end
+        # The wasm code for the ivar setter wnode doesn't leave
+        # any value on stack (store instruction). So if the last
+        # evaluated value must be kept then load the ivar again
+        @wgenerator.ivar(wnode, ivar) if keep_eval
 
       # setter/getter case
       # Example (setter/getter)
@@ -437,9 +435,9 @@ module Rlang::Parser
         wn_recv.reparent_to(wn_var_set)
 
         # Second argument of the setter is the operator wnode
-        # Create it with wtype :none for now. We'll fix that
-        # with the operands call later on
-        wn_op = @wgenerator.operator(wn_var_set, op)
+        # Create it with wtype of receiver by default. We may
+        # change that wtype with the operands call later on
+        wn_op = @wgenerator.send_method(wn_var_set, op, wn_recv.wtype)
 
         # Parsing the send node will create the getter wnode
         # this is the first argument of the operator wnode,
@@ -450,7 +448,7 @@ module Rlang::Parser
 
         # If the setter returns something and last evaluated value
         # must be ignored then drop it
-        unless keep_eval && !wn_var_set.wtype.blank?
+        unless (keep_eval || wn_var_set.wtype.blank?)
           @wgenerator.drop(wnode)
           #@wgenerator.call(wnode, wn_recv.wtype.name, "#{method_name}", :instance)
         end
@@ -607,38 +605,32 @@ module Rlang::Parser
       raise "Instance variable #{iv_name} can only be used in method scope" \
         unless wnode.in_method_scope? 
 
-      unless (wattr = wnode.find_ivar(iv_name))
-        # first ivar occurence, create it 
-        wattr = wnode.create_ivar(iv_name)
-        new_ivar = true
-      end
-
-      # ivar assignment is like calling the corresponding
-      # setter on self. So create self wnode first
-      wn_recv = parse_self(node, wnode)
-      wn_ivasgn = @wgenerator.ivasgn(wnode, wn_recv, wattr)
-
-      # Second argument is the expression
-      wn_exp = parse_node(exp_node, wn_ivasgn)
-
-      if new_ivar
-        # type cast the wattr and its ivar to the wtype 
-        # of the expression as this its first occurence
-        logger.debug "Setting new ivar #{wattr.name} wtype to #{wn_exp.wtype.name}"
-        wattr.wtype = wn_exp.wtype
-      else
+      if (ivar = wnode.find_ivar(iv_name))
         # if ivar already exists then type cast the 
         # expression to the wtype of the existing ivar
-        logger.debug "Casting exp. wtype #{wn_exp.wtype} to existing ivar #{wattr.name} wtype #{wattr.wtype}"
-        @wgenerator.cast(wn_exp, wattr.wtype, false)
+        wn_ivasgn = @wgenerator.ivasgn(wnode, ivar)
+        wn_exp = parse_node(exp_node, wn_ivasgn)
+        logger.debug "Casting exp. wtype #{wn_exp.wtype} to existing ivar #{ivar.name} wtype #{ivar.wtype}"
+        @wgenerator.cast(wn_exp, ivar.wtype, false)
+      else
+        # first ivar occurence, create it 
+        ivar = wnode.create_ivar(iv_name)
+        # parse the expression to determine its wtype
+        wn_phony = @wgenerator.phony(wnode)
+        wn_exp = parse_node(exp_node, wn_phony)
+        # the ivar wtype is defined by the
+        # wtype of the expression
+        ivar.wtype = wn_exp.wtype
+        wn_ivasgn = @wgenerator.ivasgn(wnode, ivar)
+        wn_phony.reparent_children_to(wn_ivasgn)
+        logger.debug "Setting new ivar #{ivar.name} wtype to #{wn_exp.wtype.name}"      
       end
 
-      # If the setter returns something and last evaluated value
-      # must be ignored then drop it
-      unless keep_eval && !wn_ivasgn.wtype.blank?
-        @wgenerator.drop(wnode)
-      end
-      return wn_ivasgn
+      # The wasm code for the ivar setter wnode doesn't leave
+      # any value on stack (store instruction). So if the last
+      # evaluated value must be kept then load the ivar again
+      @wgenerator.ivar(wnode, ivar) if keep_eval
+      wn_ivasgn
     end
 
     # Example
@@ -759,15 +751,14 @@ module Rlang::Parser
       raise "Instance variable can only be accessed in method scope" \
         unless wnode.in_method_scope?
       iv_name, = *node.children
-      if (wattr = wnode.find_ivar(iv_name))
-        wn_recv = parse_self(node, wnode)
-        wn_ivar = @wgenerator.ivar(wnode, wn_recv, wattr)
+      if (ivar = wnode.find_ivar(iv_name))
+        wn_ivar = @wgenerator.ivar(wnode, ivar)
       else
-        raise "unknown instance variable #{cv_name}"
+        raise "unknown instance variable #{ivar_name}"
       end
       # Drop last evaluated result if asked to
       @wgenerator.drop(wnode) unless keep_eval
-      return wn_ivar
+      wn_ivar
     end
 
     # Example
@@ -834,6 +825,29 @@ module Rlang::Parser
 
       logger.debug "wn_false:#{wn_false} wtype:#{wn_false.wtype} keep_eval:#{keep_eval}"
       return wn_false
+    end
+
+    # Whenever a string literal is used in Rlang
+    # in whatever scope (root, class or method scope)
+    # the string literal must be allocated
+    # statically.
+    # Then if the literal is used in a method scope
+    # we must instantiate a dynamic string object
+    # and copy the initial static value in it
+    def parse_string(node, wnode, keep_eval)
+      string = node.children.last
+      if wnode.in_method_scope?
+        # allocate string dynamically
+        wn_string = @wgenerator.string_dynamic_new(wnode, string)
+      else
+        # allocate string statically
+        wn_string = @wgenerator.string_static_new(wnode, string)
+      end
+      # Drop last evaluated result if asked to
+      @wgenerator.drop(wnode) unless keep_eval
+
+      logger.debug "wn_string:#{wn_string} wtype:#{wn_string.wtype} keep_eval:#{keep_eval}"
+      return wn_string
     end
 
     # Example
@@ -1206,15 +1220,8 @@ module Rlang::Parser
 
       # A that stage it's a method call of some sort
       # (call on class or instance)
-      if ARITHMETIC_OPS.include?(method_name) ||
-         RELATIONAL_OPS.include?(method_name) ||
-         UNARY_OPS.include?(method_name)
-        return parse_operator(node, wnode, keep_eval)
-      else
-        return parse_send_method_lookup(node, wnode, keep_eval)
-      end
+      return parse_send_method_lookup(node, wnode, keep_eval)
 
-      raise "FATAL ERROR!! Unreachable point at end of parse_send (node: #{node})"
     end
 
     def parse_send_nil_receiver(node, wnode, keep_eval)
@@ -1399,9 +1406,15 @@ module Rlang::Parser
         # Create class and method objects as we known we'll
         # be calling them later on
         WNode.root.find_or_create_class(cn_name)
-        method_type = (mn_name[0] == '#' ? :instance : :class)
-        (mwn = wnode.find_or_create_method(mn_name, cn_name, nil, method_type)).wtype = WType.new(result_type)
-        logger.debug "result_type #{mwn.wtype} for method #{mwn.name}"
+        if mn_name[0] == '#'
+          method_type = :instance
+          mth_name = mn_name[1..-1].to_sym
+        else
+          method_type = :class
+          mth_name = mn_name.to_sym
+        end
+        (mth = wnode.find_or_create_method(mth_name, cn_name, nil, method_type)).wtype = WType.new(result_type)
+        logger.debug "Declared #{method_type} method #{mth.name} in class #{mth.class_name} with wtype #{mth.wtype.name}"
       else
         raise "result declaration not supported #{wn.scope} scope"
       end
@@ -1462,7 +1475,7 @@ module Rlang::Parser
         if (wattr = wnode.find_wattr(name))
           logger.debug "Setting wattr #{name} type to #{wtype}"
           # TODO find a way to update both wtype at once
-          wattr.wtype = wattr.ivar.wtype = WType.new(wtype)
+          wattr.wtype = WType.new(wtype)
         else
           raise "Unknown class attribute #{name} in #{wnode}"
         end          
@@ -1510,18 +1523,21 @@ module Rlang::Parser
 
       # Find the :wat entry in hash
       logger.debug "Hash node: #{hash_node} "
-      wat_node = hash_node.children. \
+      wat_node = hash_node.children.\
         find {|pair| sym_node, = *pair.children; sym_node.children.last == :wat}
       raise "inline has no wat: hash entry" unless wat_node
+      logger.debug "inline wat entry: #{wat_node}"
 
       # Find the :wtype entry in hash if any
-      wtype_node = hash_node.children. \
+      wtype_node = hash_node.children.\
         find {|pair| sym_node, = *pair.children; sym_node.children.last == :wtype}
       if wtype_node
         wtype = WType.new(wtype_node.children.last.children.last)
+        logger.debug "inline wtype entry: #{wtype_node}"
       else
         wtype = WType::DEFAULT
       end
+      logger.debug "wtype: #{wtype} "
 
       # Now extract the WAT code itself
       raise "inline has no wat: hash entry" unless wat_node
@@ -1536,68 +1552,11 @@ module Rlang::Parser
       end
       wn_inline = @wgenerator.inline(wnode, wat_code, wtype)
       # Drop last evaluated result if asked to
-      @wgenerator.drop(wnode) unless keep_eval
+      @wgenerator.drop(wnode) unless (keep_eval || wtype.blank?)
       return wn_inline
     end
 
-    # If receiver not self or const then it could
-    # be an arithmetic or relational expression
-    # a method call on class "instance"
-    #
-    # Example for binary op
-    # 1 + 2
-    # ----------
-    # (send
-    #   (int 1) :+
-    #   (int 2)
-    # )
-    #
-    # Example unary op
-    # !(n==1)
-    # ----------
-    # (send
-    #   (begin
-    #     (send (lvar :n) :== (int 1))
-    #  ) :!)
-    #
-    def parse_operator(node, wnode, keep_eval)
-      recv_node = node.children[0]
-      operator = node.children[1]
-      wn_op = @wgenerator.operator(wnode, operator)
-      wn_recv = parse_node(recv_node, wn_op, true)
-      # now process the 2nd op arguments (there should
-      # be only one but do as if we had several
-      arg_nodes = node.children[2..-1]
-      raise "method #{operator} got #{arg_nodes.count} arguments (expected 0 or 1)" \
-        unless arg_nodes.count <= 1
-      wn_args = arg_nodes.collect {|n| parse_node(n, wn_op, true)}
-      @wgenerator.operands(wn_op, wn_recv, wn_args)
-      logger.debug "  After type cast:  #{wn_op} wtype: #{wn_op.wtype}, op children types: #{wn_op.children.map(&:wtype)}"
-      # Drop last evaluated result if asked to
-      @wgenerator.drop(wnode) unless keep_eval
-      return wn_op
-    end
-
-    # Method lookup
-    # In the example below mem_size wasn' t 
-    # recognized as a local var because it was not 
-    # assigned a value before. It's recognized as
-    # a tentative method call
-    # Example
-    #  some_var = mem_size + 10
-    # ------
-    # (send
-    #   (send nil :mem_size) :+
-    #   (int 10))
-    #  
-    #
-    # Example for method call on class instance
-    # @@cvar.x = 100
-    # ----------
-    # (send
-    #   (cvar :@@cvar) :x= (int 100)
-    # )
-    # TODO must guess type arg from operator type
+    # Determine whether it's an instance or class method call
     def parse_send_method_lookup(node, wnode, keep_eval)
       recv_node = node.children[0]
       #method_name = node.children[1]
@@ -1699,33 +1658,88 @@ module Rlang::Parser
       raise "FATAL ERROR!! Unreachable point at end of parse_send_class_method_call (node: #{node})"
     end
 
+    # Instance Method lookup and native operator
+    #
+    # In the example below mem_size would be
+    # recognized as a local var because it was not 
+    # assigned a value before. It's recognized as
+    # a tentative method call
+    # Example
+    #  some_var = mem_size + 10
+    # ------
+    # (send
+    #   (send nil :mem_size) :+
+    #   (int 10))
+    #
+    # Example for method call on class instance
+    # @@cvar.x = 100
+    # ----------
+    # (send
+    #   (cvar :@@cvar) :x= (int 100)
+    # )
+    # 
+    # If receiver not self or const then it could
+    # be an arithmetic or relational operator or
+    # an operato overloaded in the related class
+    #
+    # Example for binary op
+    # 1 + 2
+    # ----------
+    # (send
+    #   (int 1) :+
+    #   (int 2)
+    # )
+    #
+    # Example unary op
+    # !(n==1)
+    # ----------
+    # (send
+    #   (begin
+    #     (send (lvar :n) :== (int 1))
+    #  ) :!)
+    #
     def parse_send_instance_method_call(node, wnode, keep_eval)
       recv_node = node.children[0]
       method_name = node.children[1]
       # Parse receiver node and temporarily attach it
       # to parent wnode. It will later become the first
       # argument of the method call by reparenting it
-      logger.debug "Parsing instance method call #{method_name}..."
-      # parse the receiver node
-      # if nil it means self
-      wn_recv = recv_node.nil? ? parse_self(recv_node, wnode) : parse_node(recv_node, wnode)
-      logger.debug "... on #{wn_recv}"
-      class_name = wn_recv.wtype.name
+      logger.debug "Parsing instance method call #{method_name}, keep_eval: #{keep_eval}..."
+      logger.debug "... on receiver #{recv_node}..."
 
-      wn_call = @wgenerator.call(wnode, class_name, method_name, :instance)
-      wn_recv.reparent_to(wn_call) if wn_recv
+      # parse the receiver node just to know its wtype
+      # if nil it means self
+      wn_phony = @wgenerator.phony(wnode)
+
+      wn_recv = recv_node.nil? ? parse_self(recv_node, wn_phony) : parse_node(recv_node, wn_phony)
+      logger.debug "Parsed receiver : #{wn_recv} / wtype: #{wn_recv.wtype}"
+
+      # If it's a Wasm natively supported operator and it
+      # is not overloaded by the receiver's class
+      # then generate native operator Wasm code instead of
+      # a method call
+      wn_op = @wgenerator.send_method(wnode, method_name, wn_recv.wtype)
+
+      # reparent the receiver wnode(s) to operator wnode
+      wn_phony.reparent_children_to(wn_op)
+      wnode.remove_child(wn_phony)
 
       # Grab all arguments and add them as child of the call node
       arg_nodes = node.children[2..-1]
-      arg_nodes.each do |node| 
-        wn = parse_node(node, wn_call) 
-        logger.debug "...with arg #{wn}"
+      wn_args = arg_nodes.collect do |n| 
+        logger.debug "...with arg #{n}"
+        parse_node(n, wn_op, true)
       end
-      logger.debug "Resulting in call node #{wn_call}"
+
+      # now cast operands (will do nothing if it's a method call)
+      @wgenerator.operands(wn_op, wn_recv, wn_args)
+      logger.debug "After operands, call wnode: #{wn_op} wtype: #{wn_op.wtype}, wn_op children types: #{wn_op.children.map(&:wtype)}"
+
       # Drop last evaluated result if asked to or if
       # the method called doesn't return any value
-      @wgenerator.drop(wnode) unless (keep_eval || wn_call.wtype.blank?)
-      return wn_call
+      @wgenerator.drop(wnode) unless (keep_eval || wn_op.wtype.blank?)
+
+      return wn_op
     end
 
     def parse_type_args(hash_node, entity)
@@ -1999,7 +2013,7 @@ module Rlang::Parser
       logger.debug "logical operator section : #{node.type}"
       cond1_node, cond2_node = *node.children
       # Prepare the operator wnode
-      wn_op = @wgenerator.operator(wnode, node.type)
+      wn_op = @wgenerator.native_operator(wnode, node.type)
       # Parse operand nodes and attach them to the
       # operator wnode
       wn_cond1 = parse_node(cond1_node, wn_op)

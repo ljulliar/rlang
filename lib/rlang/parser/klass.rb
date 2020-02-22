@@ -13,7 +13,8 @@ module Rlang::Parser
     include Log
 
     attr_reader :wtype
-    attr_accessor :name, :wnode, :wattrs, :cvars, :consts, :methods
+    attr_accessor :name, :wnode, :wattrs, :ivars, :cvars, 
+                  :consts, :methods, :offset
 
     def initialize(name)
       @name = name
@@ -24,13 +25,15 @@ module Rlang::Parser
       @wnode = nil
       logger.debug "Klass created #{self.inspect}"
       @wattrs  = [] # class attributes
+      @ivars   = [] # instance variables
       @cvars   = [] # class variables
       @consts  = [] # class constants
       @methods = [] # methods
+      @offset  = 0  # offset of the next class attribute in memory
     end
 
     def size
-      self.wattrs.sum(&:size)
+      @offset
     end
 
     def wtype=(wtype)

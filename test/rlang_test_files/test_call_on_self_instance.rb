@@ -1,5 +1,14 @@
 class Test
 
+  # Pre-declare those instance method
+  # because they are called before
+  # their implementation is processed
+  # by the compiler
+  # (Note the use of '#' in the method name
+  # to indicate an instance method
+  result :Test, :'#instance_m2', :I32
+  result :Test, :'#instance_m3', :I32
+
   # call on implicit self
   def instance_m1(arg)
     instance_m2(arg) + 20

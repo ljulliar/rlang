@@ -16,32 +16,40 @@ module Rlang::Parser
     attr_reader :name, :wtype
     attr_accessor :class_name, :margs, :lvars, :wnode
 
-    def initialize(name, class_name, wtype=WType::DEFAULT)
+    METHOD_TYPES = [:class, :instance]
+
+    def initialize(name, class_name, wtype, method_type)
       raise "Wrong method wtype argument: #{wtype.inspect}" unless wtype.is_a? WType
       @name = name
       @class_name = class_name
-      @wtype = wtype
-      @instance = false
+      @wtype = wtype || WType::DEFAULT
+      @method_type = method_type
+      raise "Unknown method type: #{method_type}" unless METHOD_TYPES.include? @method_type
       @wnode = nil # wnode where method is implemented
       logger.debug "Method created #{self.inspect}"
       @margs = []   # method args
       @lvars = []   # local variables
     end
 
+    def implemented?
+      !@wnode.nil?
+    end
+    
     def instance!
-      @instance = true
+      @method_type = :instance
     end
 
     def instance?
-      @instance
+      @method_type == :instance
+
     end
 
     def class!
-      @instance = false
+      @method_type = :class
     end
 
     def class?
-      !@instance
+      @method_type == :class
     end
 
     def wtype=(wtype)
@@ -50,7 +58,7 @@ module Rlang::Parser
     end
 
     def wasm_name
-      if @instance
+      if self.instance?
         "$#{@class_name}##{@name}"
       else
         "$#{@class_name}::#{@name}"
@@ -62,7 +70,7 @@ module Rlang::Parser
     end
 
     def export_name
-      if @instance
+      if self.instance?
         "#{@class_name.downcase}_i_#{@name}"
       else
         "#{@class_name.downcase}_c_#{@name}"
