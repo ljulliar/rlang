@@ -439,7 +439,7 @@ class MyOtherClass
     wasm wat: '(i32.mul 
                    (local.get $arg1)
                    (local.get $arg1))',
-           ruby: 'arg1 ** 2'
+         ruby: 'arg1 ** 2'
   end
 end
 ```
@@ -461,7 +461,7 @@ For now, the Rlang library is very modest and containoffers the following classe
   * Malloc.malloc(nbytes) : dynamically allocates nbytes of memory and return address of the allocated memory space or -1 if it fails
   * Malloc.free(address) : frees the block of memory at the given address
 * **Object** class: provides a couple of object management method. Use `Object.free` to free an object.
-* **String** class: string are initialized in Rlang by using a string literal like `"This is my string"`. String methods supported are very minimal for the moment. Feel free to improve.
+* **String** class: string are initialized in Rlang by using a string literal like `"This is my string"`. String methods supported are very minimal for the moment. See [rlang/lib/String.rb](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/string.rb). Feel free to improve.
 
 As a side note, the dynamic memory allocator currently used in Rlang is shamelessly adapted from the example provided in the famous Kernigan & Richie C book 2nd edition. Take a look at the [C version](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.c) and see how easy it is to rewrite it in [Rlang](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb).
 
