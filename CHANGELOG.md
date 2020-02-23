@@ -1,3 +1,7 @@
+## 0.4.1
+* Class attributes syntac now identical to plain Ruby
+* Very preliminary version of Rlang String class
+
 ## 0.4.0
 * Object instances, instance methods and instance variables now supported
 * Test suite using parser directly
