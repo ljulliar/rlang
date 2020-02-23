@@ -271,7 +271,7 @@ module Rlang::Parser
       @wgenerator.ivars_setup(wn_class)
       @wgenerator.def_initialize(wn_class) # generate **BEFORE** new
       @wgenerator.def_new(wn_class)
-      @wgenerator.def_wattr(wn_class)
+      @wgenerator.def_attr(wn_class)
       wn_class
     end
 
@@ -386,6 +386,8 @@ module Rlang::Parser
       # s(:op_asgn,
       #    s(:ivasgn, :@stack_ptr), :-, s(:lvar, :nbytes))
       when :ivasgn
+        raise "Instance variable can only be accessed in instance method scope" \
+          unless wnode.in_instance_method_scope?
         var_asgn_node, operator, exp_node = *node.children
         var_name = var_asgn_node.children.last
 
@@ -602,8 +604,8 @@ module Rlang::Parser
     def parse_ivasgn(node, wnode, keep_eval)
       iv_name, exp_node = *node.children
 
-      raise "Instance variable #{iv_name} can only be used in method scope" \
-        unless wnode.in_method_scope? 
+      raise "Instance variable #{iv_name} can only used in instance method scope" \
+        unless wnode.in_instance_method_scope? 
 
       if (ivar = wnode.find_ivar(iv_name))
         # if ivar already exists then type cast the 
@@ -748,8 +750,8 @@ module Rlang::Parser
     # ---
     # ... s(:ivar, :@stack_ptr)
     def parse_ivar(node, wnode, keep_eval)
-      raise "Instance variable can only be accessed in method scope" \
-        unless wnode.in_method_scope?
+      raise "Instance variable can only be accessed in instance method scope" \
+        unless wnode.in_instance_method_scope?
       iv_name, = *node.children
       if (ivar = wnode.find_ivar(iv_name))
         wn_ivar = @wgenerator.ivar(wnode, ivar)
@@ -1254,12 +1256,12 @@ module Rlang::Parser
         return parse_send_result(node, wnode, keep_eval)
       end
 
-      if recv_node.nil? && method_name == :wattr
-        return parse_send_wattr(node, wnode, keep_eval)
+      if recv_node.nil? && method_name.to_s =~ /^attr_(reader|writer|accessor)/
+        return parse_send_attr(node, wnode, keep_eval)
       end
 
-      if recv_node.nil? && method_name == :wattr_type
-        return parse_send_wattr_type(node, wnode, keep_eval)
+      if recv_node.nil? && method_name == :attr_type
+        return parse_send_attr_type(node, wnode, keep_eval)
       end
 
       if recv_node.nil? &&  method_name == :inline
@@ -1426,38 +1428,46 @@ module Rlang::Parser
     # memory with an offset from the base address given as
     # an argument.
     #
+    # xxxxx below can be reader, writer, accessor
+    #
     # Example
-    # wattr :ptr, :size
+    # attr_xxxxx :ptr, :size
     # ---------
-    # s(:send, nil, :wattr,
+    # s(:send, nil, :attr,
     #   s(:sym, :ptr),
     #   s(:sym, :size))
-    def parse_send_wattr(node, wnode, keep_eval)
-      raise "wattr directives can only happen in class scope" \
+    def parse_send_attr(node, wnode, keep_eval)
+      raise "attr directives can only happen in class scope" \
         unless wnode.in_class_scope?
-      wattr_nodes = node.children[2..-1]
-      wattr_nodes.each do |wan|
-        logger.debug "processing wattr node #{wan}"
-        raise "attribute name must be a symbol (got #{wan})" unless wan.type == :sym
-        wattr_name = wan.children.last
-        if (wattr = wnode.find_wattr(wattr_name))
-          raise "attribute #{wattr_name} already declared" if wattr
+      
+      # check accessor directive is valid
+      attr_access = node.children[1].to_s
+      raise "Unknown kind of attribute accessor: #{attr_access}" \
+        unless ['attr_reader', 'attr_writer', 'attr_accessor'].include? attr_access
+      # scan through all attributes
+      attr_nodes = node.children[2..-1]
+      attr_nodes.each do |an|
+        logger.debug "processing attr node #{an}"
+        raise "attribute name must be a symbol (got #{an})" unless an.type == :sym
+        attr_name = an.children.last
+        if (attr = wnode.find_attr(attr_name))
+          raise "attribute #{attr_name} already declared" if attr
         else
-          wattr = wnode.create_wattr(wattr_name)
-          wattr.getter.export! if (@@export || self.config[:export_all])
-          wattr.setter.export! if (@@export || self.config[:export_all])
+          attr = wnode.create_attr(attr_name)
+          attr.export!
         end
+        attr.send(attr_access)
       end
-      return
+      nil
     end
 
     # Directive to specify wasm type of class attributes
     # in case it's not the default type 
     #
     # Example
-    # wattr_type ptr: :I64, size: :I32
+    # attr_type ptr: :I64, size: :I32
     # ---------
-    # s(:send, nil, :wattr_type,
+    # s(:send, nil, :attr_type,
     #   (hash
     #     (pair
     #       s(:sym, :ptr)
@@ -1466,16 +1476,16 @@ module Rlang::Parser
     #       s(:sym, :size)
     #       s(:sym, :I32))   ))
     #
-    def parse_send_wattr_type(node, wnode, keep_eval)
-      raise "wattr directives can only happen in class scope" \
+    def parse_send_attr_type(node, wnode, keep_eval)
+      raise "attr directives can only happen in class scope" \
         unless wnode.in_class_scope?
       hash_node = node.children.last
-      wattr_types = parse_type_args(hash_node, :attribute)
-      wattr_types.each do |name, wtype|
-        if (wattr = wnode.find_wattr(name))
-          logger.debug "Setting wattr #{name} type to #{wtype}"
+      attr_types = parse_type_args(hash_node, :attribute)
+      attr_types.each do |name, wtype|
+        if (attr = wnode.find_attr(name))
+          logger.debug "Setting attr #{name} type to #{wtype}"
           # TODO find a way to update both wtype at once
-          wattr.wtype = WType.new(wtype)
+          attr.wtype = WType.new(wtype)
         else
           raise "Unknown class attribute #{name} in #{wnode}"
         end          

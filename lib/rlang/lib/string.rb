@@ -1,7 +1,7 @@
 require_relative './malloc'
 
 class String
-  wattr :length, :ptr
+  attr_reader :length, :ptr
 
   # str is a pointer to a memory 
   # location of type :String allocated either

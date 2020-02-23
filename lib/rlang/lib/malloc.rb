@@ -35,8 +35,8 @@ $NALLOC = 1024
 DAta[:dummy_malloc_data] = [0, 0, 0, 0, 0]
 
 class Header
-  wattr :ptr, :size
-  wattr_type ptr: :Header, size: :I32
+  attr_accessor :ptr, :size
+  attr_type ptr: :Header, size: :I32
 end
     
 class Malloc

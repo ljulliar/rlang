@@ -146,23 +146,27 @@ module Rlang::Parser
 
     # generate code for class attributes
     # (called at end of class parsing)
-    def def_wattr(wnode)
+    def def_attr(wnode)
       wnc = wnode.class_wnode
       raise "Cannot find class for attributes definition!!" unless wnc
       # Process each declared class attribute
-      wnc.klass.wattrs.each do |wattr|
-        logger.debug("Generating accessors for attribute #{wnc.klass.name}\##{wattr.name}")
+      wnc.klass.attrs.each do |attr|
+        logger.debug("Generating accessors for attribute #{wnc.klass.name}\##{attr.name}")
         # Generate getter and setter methods wnode
         # unless method already implemented by user
-        unless wattr.setter.implemented?
-          wattr.setter.wnode = self.wattr_setter(wnc, wattr)
-        else
-          logger.debug "Attribute setter #{wattr.setter.name} already defined. Skipping"
+        if attr.setter
+          unless attr.setter.implemented?
+            attr.setter.wnode = self.attr_setter(wnc, attr)
+          else
+            logger.debug "Attribute setter #{attr.setter.name} already defined. Skipping"
+          end
         end
-        unless wattr.getter.implemented?
-          wattr.getter.wnode = self.wattr_getter(wnc, wattr)
-        else
-          logger.debug "Attribute getter #{wattr.setter.name} already defined. Skipping"
+        if attr.getter
+          unless attr.getter.implemented?
+            attr.getter.wnode = self.attr_getter(wnc, attr)
+          else
+            logger.debug "Attribute getter #{attr.getter.name} already defined. Skipping"
+          end
         end
       end
 
@@ -181,22 +185,22 @@ module Rlang::Parser
     end
 
     # Generate attribute setter method wnode
-    def wattr_setter(wnode, wattr)
+    def attr_setter(wnode, attr)
       wnc = wnode.class_wnode
       wn_set = WNode.new(:insn, wnc, true)
-      wn_set.c(:wattr_setter, func_name: wattr.setter.wasm_name, 
-            wattr_name: wattr.wasm_name, wtype: wattr.wasm_type,
-            offset: wattr.offset)
+      wn_set.c(:attr_setter, func_name: attr.setter.wasm_name, 
+            attr_name: attr.wasm_name, wtype: attr.wasm_type,
+            offset: attr.offset)
       wn_set
     end
 
     # Generate attribute getter method wnode
-    def wattr_getter(wnode, wattr)
+    def attr_getter(wnode, attr)
       wnc = wnode.class_wnode
       wn_get = WNode.new(:insn, wnc, true)
-      wn_get.c(:wattr_getter, func_name: wattr.getter.wasm_name, 
-            wattr_name: wattr.wasm_name, wtype: wattr.wasm_type,
-            offset: wattr.offset)
+      wn_get.c(:attr_getter, func_name: attr.getter.wasm_name, 
+            attr_name: attr.wasm_name, wtype: attr.wasm_type,
+            offset: attr.offset)
       wn_get
     end
 
@@ -291,19 +295,19 @@ module Rlang::Parser
       wn
     end
 
-    # Call setter (on wattr or instance variable)
+    # Call setter (on attr or instance variable)
     # This is the same as calling the corresponding setter
-    def call_setter(wnode, wnode_recv, wattr)
-      wn = self.call(wnode, wnode_recv.wtype.name, wattr.setter_name, :instance)
+    def call_setter(wnode, wnode_recv, attr)
+      wn = self.call(wnode, wnode_recv.wtype.name, attr.setter_name, :instance)
       # First argument of the setter must be the receiver
       wnode_recv.reparent_to(wn)
       wn
     end
 
-    # Call getter (on wattr or instance variable)
+    # Call getter (on attr or instance variable)
     # This is the same as calling the corresponding getter
-    def call_getter(wnode, wnode_recv, wattr)
-      wn = self.call(wnode, wnode_recv.wtype.name, wattr.getter_name, :instance)
+    def call_getter(wnode, wnode_recv, attr)
+      wn = self.call(wnode, wnode_recv.wtype.name, attr.getter_name, :instance)
       # First argument of the getter must always be the receiver
       wnode_recv.reparent_to(wn)
       wn

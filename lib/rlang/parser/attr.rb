@@ -9,7 +9,7 @@ require_relative './ivar'
 require_relative './wtype'
 
 module Rlang::Parser
-  class WAttr
+  class Attr
     include Log
     attr_reader :name, :getter, :setter, :ivar
 
@@ -19,11 +19,32 @@ module Rlang::Parser
       @class_wnode = class_wnode
       @name = name
       @ivar = class_wnode.create_ivar(:"@#{name}", wtype)
-      @getter = @class_wnode.find_or_create_method(self.getter_name, nil, wtype, :instance)
-      logger.debug "Getter created: #{@getter.inspect}"
-      @setter = @class_wnode.find_or_create_method(self.setter_name, nil, wtype, :instance)
-      logger.debug "Setter created: #{@setter.inspect}"
+      @getter = nil
+      @setter = nil
+      @export = false
       logger.debug "Class attribute #{name} created"
+    end
+
+    def attr_reader
+      @getter = @class_wnode.find_or_create_method(self.getter_name, nil, wtype, :instance)
+      @getter.export! if @export
+      logger.debug "Getter created: #{@getter.inspect}"
+      @getter
+    end
+
+    def attr_writer
+      @setter = @class_wnode.find_or_create_method(self.setter_name, nil, wtype, :instance)
+      @setter.export! if @export
+      logger.debug "Setter created: #{@setter.inspect}"
+      @setter
+    end
+
+    def attr_accessor
+      [self.attr_reader, self.attr_writer]
+    end
+
+    def export!
+      @export = true
     end
 
     def class_name
@@ -39,11 +60,11 @@ module Rlang::Parser
     end
     
     def wtype=(wtype)
-      # Adjust corresponding method objects wtype accordingly
-      @getter.wtype = wtype
-      @setter.wtype = wtype
+      # Adjust getter/setter and ivar wtype accordingly
+      @getter.wtype = wtype if @getter
+      @setter.wtype = wtype if @setter
       @ivar.wtype = wtype
-      logger.debug "WAttr/Getter/Setter/ivar wtype updated : #{@getter.inspect}"
+      logger.debug "Attr/Getter/Setter/ivar wtype updated : #{@getter.inspect}"
     end
 
     def getter_name

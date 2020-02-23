@@ -71,46 +71,45 @@ This short piece of code shows several interesting points:
 1. In `MyClass::take_one` you can see that Rlang also supports convenient syntactic sugar like `if` as a modifier or combined operation and assignment as in Ruby (here the `-=` operator)
 
 ### Class attributes and instance variables
-Rlang support both the use of class attributes and instance variables. Class attribute declaration is happening through the `wattr` directive. I actually defines a couple of things for you:
-1. Define the corresponding accessors both getter and setter (like `attr_accessor` does in Ruby)
-2. Define the corresponding instance variable
+Rlang support both the use of class attributes and instance variables. Class attribute declaration is happening through the `attr_accessor`, `attr_reader` or `attr_writer` directives as in plain Ruby. It actually defines a couple of things for you:
 
-Here is an example showing the definition of a single attribute
+Here is an example showing the definition of a single attribute both in read and write mode.
 ```ruby
 class Square
-  wattr :side
+  attr_accessor :side
 
   def area
-    self.side * self.side
+    @side * @side
   end
 end
 ```
-Later in your code you could use this class in your code as follows
+Later in your code you could 
 
 ```ruby
 class Test
-  @@square = Square.new
 
   def self.my_method
-    @@square.side = 10
-    @@square.area
+    s = Square.new
+    s.side = 10
+    area = square.area
+    perimeter = s.side * 4
   end
 end
 ```
 
-The code is pretty straightforward: a new square instance is created (here it is created statically at compile time), its side attribute is set to 10 and, as you would expect, the call to the Square#area method returns 100.
+The code is pretty straightforward: a new square instance is created, its side attribute is set to 10. As you would expect, the call to the Square#area method returns 100 and the perimeter is 40.
 
 ### Class attribute type
 In the example above the `side` attribute is implicitely using the `:I32` (long integer) WebAssembly type. It's the default Rlang type. Assuming you want to manage big squares, you'd have to use `:I64` (double integer) like this for the `side` attribute and also instruct Rlang that the return value of area is also `:I64` (more on this later).
 
 ```ruby
 class Square
-  wattr :side
-  wattr_type side: :I64
+  attr_accessor :side
+  attr_type side: :I64
 
   def area
     result :I64
-    self.side * self.side
+    @side * @side
   end
 end
 ```
@@ -119,19 +118,26 @@ end
 Starting with version 0.4.0, Rlang is equipped with a dynamic memory allocator (see [Rlang library](#the-rlang-library) section). It is therefore capable of allocating objects in a dynamic way at *runtime*. Prior versions were only capable of allocating objects statically at *compile* time.
 
 ### Static objects
-You have already seen how to perform static objects allocation in one of our previous example. A statement like `@@square = Square.new` appearing in the body of a class definition result in a portion of the WebAssembly memory being statically allocated and initialized at compile time by Rlang and the `@@square` variable points to that particular memory location. Similarly you can also statically instantiate and store an object in a global variable or in a constant like this:
+A statement like `@@square = Square.new` appearing in the body of a class definition result in a portion of the WebAssembly memory being statically allocated at compile time by Rlang. The `@@square` class variable points to that particular memory location. Similarly you can also statically instantiate and store an object in a global variable or in a constant like this:
 
 ```ruby
-SQUARE = Square.new
-$SQUARE = Square.new
+class Test
+  @@square = Square.new
+  SQUARE = Square.new
+  $SQUARE = Square.new
+
+  # Your methods below...
+  # ...
+end
 ```
+
+**IMPORTANT NOTE**: in the current version of Rlang the new method call used to allocate the object sape doesn't do any initialization. That's why the new method in this context (class body or top level) doesn't accept any parameter
 
 ### Dynamic objects
 At any point in the body of method you can dynamically instantiate a new object. Here is an exemple:
 
 ```ruby
 class Cube
-  wattr :x, :y, :z
 
   def initialize(x, y, z)
    @x = x; @y = y; @z = z
@@ -141,20 +147,26 @@ class Cube
     @x * @y * @z
   end
 end
+```
+In this example the `Cube` method uses 3 instance variables `@x`, `@y`, `@z`.
 
+Whenever you define a class, Rlang automatically generate the MyClass._size_ class method. Calling this method will tell you how many bytes MyClass objects uses in memory. As an example, a call to `Cube._size_` would return 12 as the 3 instance variables of Cube are of type `I32` using 4 bytes each in memory.
+
+### Garbage collection
+In its current version, Rlang doesn't come with a garbage collector. All dynamically allocated objects must eventually be freed explicitely using the `Object.free` method in your code when objects are no longer needed.
+
+Here is an example building on the Cube class that we just defined:
+```ruby
 class Main
   def self.run
+  # Dynamic allocation of a new Cube
     cube = Cube.new(10, 20, 30)
-    v = cube.volume # would be 6000
-    # ... Do what eveer you have to do...
+    v = cube.volume
+    # ... Do what ever you have to do...
     Object.free(cube)
   end
 end
 ```
-In this example the `Cube` method uses 3 instance variables `@x, @y, @z`. Those instance variables can be accessed through the usual attribute accessors like `Cube#x` and `Cube#x=`. In your code you can also use the `_size_` class method to know how much bytes an object consumes in meory. Here a call to `Cube._size_` would return 12 as each instance variable is an `I32` using 4 bytes each.
-
-### (Lack of) Garbage collection
-In its current version, Rlang doesn't come with a garbage collector. So all dynamically allocated objects must be eventually free'd explicitely using the `Object.free` method in your code when objects are no longer needed.
 
 ## Methods
 Methods in Rlang are defined as you would normally do in Ruby by using the `def` reserved keyword. They can be either class or instance methods.
@@ -199,7 +211,7 @@ Note: in this directive `:method_name` symbol starts with a `#` characters if it
 For an example see the [test_def_result_type_declaration.rb](https://github.com/ljulliar/rlang/blob/master/test/rlang_test_files/test_def_result_type_declaration.rb), a Rlang file that is part of the Rlang test suite.
 
 ### Local variables
-Local variable used in a method body doesn't have to be declared. They are auto-vivified the first time you assign a value to it. In some cases though, you may have to use the `local` directive as in the example below to explicitely state the type of a local variable.
+Local variable used in a method body doesn't have to be explicitely declared. They are auto-vivified the first time you assign a value to it. In some cases though, you may have to use the `local` directive as in the example below to explicitely state the type of a local variable.
 
 ```ruby
 def self.m_local_var(arg1)
@@ -209,7 +221,7 @@ def self.m_local_var(arg1)
   # ....
 end
 ```
-In this example, the `local` directive instructs the compiler that `lvar` is of type `:I64` and the local variable mysquare is of type `Square`.
+The `local` directive above instructs the compiler that `lvar` is of type `:I64` and the local variable mysquare is of type `Square`. Without it `lvar` would have been auto-vivified with the Wasm default type or `:I32`.
 
 ### Exporting a method
 In WebAssembly, you can make functions visible to the outside world by declaring them in the export section. To achieve a similar result in Rlang, you can use the `export` keyword right before a method definition. 
@@ -271,7 +283,7 @@ end
 
 The first line will auto-vivify the `@@cvar` class variable as type `:I64`. 
 
-The second example turns the value `123876` into a pointer to a `Square` object. In the absence of dynamic object instantiation this allows you to create your own object at runtime by allocating WebAssembly memory and pointing to it as if it was an object of you choice (see Rlang library below for memory management) 
+The second example turns the value `123876` into a pointer to a `Square` object. It's pretty much like turning an integer into a pointer to a memory address in C.
 
 For `:I32` and `:I64` type cast you can also use the following shortcuts `100.to_I64` or `100.to_I32`
 
@@ -424,7 +436,7 @@ Here is an example:
 class MyOtherClass
   def self.x10_square(arg1)
     arg1 *= 10
-    inline wat: '(i32.mul 
+    wasm wat: '(i32.mul 
                    (local.get $arg1)
                    (local.get $arg1))',
            ruby: 'arg1 ** 2'
@@ -449,7 +461,8 @@ For now, the Rlang library is very modest and containoffers the following classe
   * Malloc.malloc(nbytes) : dynamically allocates nbytes of memory and return address of the allocated memory space or -1 if it fails
   * Malloc.free(address) : frees the block of memory at the given address
 * **Object** class: provides a couple of object management method. Use `Object.free` to free an object.
+* **String** class: string are initialized in Rlang by using a string literal like `"This is my string"`. String methods supported are very minimal for the moment. Feel free to improve.
 
-As a side note, the dynamic memory allocator provided with Rlang is quite simple. It is shamelessly adapted from example provided in the famous Kernigan & Richie C book 2nd edition. Take a look at the [C version](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.c) and see how easy it is to rewrite it in [Rlang](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb).
+As a side note, the dynamic memory allocator currently used in Rlang is shamelessly adapted from the example provided in the famous Kernigan & Richie C book 2nd edition. Take a look at the [C version](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.c) and see how easy it is to rewrite it in [Rlang](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb).
 
 That's it! Enjoy Rlang and, as always, feedback and contributions are welcome.

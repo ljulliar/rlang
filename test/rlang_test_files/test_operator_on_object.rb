@@ -1,8 +1,8 @@
 require 'rlang/lib'
 
 class MyHeader
-  wattr :size, :ptr
-  wattr_type size: :I64, ptr: :I32
+  attr_reader :size, :ptr
+  attr_type size: :I64, ptr: :I32
 end
 
 class Test

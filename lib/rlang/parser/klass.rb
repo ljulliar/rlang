@@ -13,7 +13,7 @@ module Rlang::Parser
     include Log
 
     attr_reader :wtype
-    attr_accessor :name, :wnode, :wattrs, :ivars, :cvars, 
+    attr_accessor :name, :wnode, :attrs, :ivars, :cvars, 
                   :consts, :methods, :offset
 
     def initialize(name)
@@ -24,7 +24,7 @@ module Rlang::Parser
       # the wnode implementing the code of the class
       @wnode = nil
       logger.debug "Klass created #{self.inspect}"
-      @wattrs  = [] # class attributes
+      @attrs  = [] # class attributes
       @ivars   = [] # instance variables
       @cvars   = [] # class variables
       @consts  = [] # class constants

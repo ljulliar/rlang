@@ -9,7 +9,7 @@ require_relative './wtype'
 require_relative './const'
 require_relative './cvar'
 require_relative './lvar'
-require_relative './wattr'
+require_relative './attr'
 require_relative './method'
 require_relative './klass'
 
@@ -50,11 +50,11 @@ module Rlang::Parser
       br_if: 'br_if %{label}',
       br: 'br %{label}',
       inline: '%{code}',
-      wattr_getter: %q{func %{func_name} (param $_self_ i32) (result %{wtype})
+      attr_getter: %q{func %{func_name} (param $_self_ i32) (result %{wtype})
   (%{wtype}.load offset=%{offset} (local.get $_self_))},
-      wattr_setter: %q{func %{func_name} (param $_self_ i32) (param %{wattr_name} %{wtype}) (result %{wtype})
-  (local.get %{wattr_name})
-  (%{wtype}.store offset=%{offset} (local.get $_self_) (local.get %{wattr_name}))},
+      attr_setter: %q{func %{func_name} (param $_self_ i32) (param %{attr_name} %{wtype}) (result %{wtype})
+  (local.get %{attr_name})
+  (%{wtype}.store offset=%{offset} (local.get $_self_) (local.get %{attr_name}))},
       class_size: %q{func %{func_name} (result %{wtype})
   (%{wtype}.const %{size})}
     }
@@ -305,25 +305,25 @@ module Rlang::Parser
       self.find_const(c_name, class_name) || self.create_const(c_name, class_name, value, wtype)
     end
 
-    def find_wattr(wa_name, class_name=nil)
+    def find_attr(name, class_name=nil)
       k = find_class(class_name)
-      raise "Can't find parent class for wattr #{wa_name}" unless k
-      logger.debug "looking for wattr #{wa_name} in class #{k.name} at wnode #{self.class_wnode}..."
-      k.wattrs.find { |wa| wa.class_name == k.name && wa.name == wa_name }
+      raise "Can't find parent class for attr #{name}" unless k
+      logger.debug "looking for attr #{name} in class #{k.name} at wnode #{self.class_wnode}..."
+      k.attrs.find { |a| a.class_name == k.name && a.name == name }
     end
 
-    def create_wattr(wa_name, wtype=WType::DEFAULT)
+    def create_attr(name, wtype=WType::DEFAULT)
       if (cn = self.class_wnode)
-        logger.debug "creating wattr #{wa_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
-        cn.klass.wattrs << (wattr = WAttr.new(cn, wa_name, wtype))
+        logger.debug "creating attr #{name} in class #{self.class_name} at wnode #{self.class_wnode}..."
+        cn.klass.attrs << (_attr = Attr.new(cn, name, wtype))
       else
-        raise "No class found for class attribute #{wa_name}"
+        raise "No class found for class attribute #{name}"
       end
-      wattr
+      _attr
     end
 
-    def find_or_create_wattr(wa_name, class_name=nil, wtype=WType::DEFAULT)
-      find_wattr(wa_name, class_name) || create_wattr(wa_name, wtype)
+    def find_or_create_attr(name, class_name=nil, wtype=WType::DEFAULT)
+      find_attr(name, class_name) || create_attr(name, wtype)
     end
 
     def create_ivar(iv_name, wtype=WType::DEFAULT)

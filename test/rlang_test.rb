@@ -382,15 +382,29 @@ class RlangTest < Minitest::Test
     assert_equal 200, @instance.exports.send(@wfunc)
   end
 
-  def test_wattr_class_size
-    assert_equal 28, @instance.exports.send(@wfunc)
-  end
-
-  def test_wattr_definition
+  def test_attr_access_on_cvar
     assert_equal 10004, @instance.exports.send(@wfunc, 5)
   end
 
-  def test_wattr_definition_with_type
+  def test_attr_access_on_lvar
+    assert_equal 10004, @instance.exports.send(@wfunc, 5)
+  end
+
+  def test_attr_class_size
+    assert_equal 28, @instance.exports.send(@wfunc)
+  end
+
+  def test_attr_definition
+    assert @instance.exports.respond_to? :test_i_rw
+    assert @instance.exports.respond_to? :test_i_rw=
+    assert @instance.exports.respond_to? :test_i_r
+    assert !@instance.exports.respond_to?(:test_i_r=)
+    assert !@instance.exports.respond_to?(:test_i_w)
+    assert @instance.exports.respond_to? :test_i_w=
+    assert_equal 111, @instance.exports.send(@wfunc)
+  end
+
+  def test_attr_definition_with_type
     assert_equal 1_000_000_000_000, @instance.exports.send(@wfunc, 1_000_000)
   end
 end

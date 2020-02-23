@@ -1,7 +1,7 @@
 require 'rlang/lib'
 
 class Square
-  wattr :side
+  attr_accessor :side
 end
 
 class Test

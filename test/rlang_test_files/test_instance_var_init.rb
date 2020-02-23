@@ -5,7 +5,7 @@ class Test
     @ivar = 100
   end
 
-  # do not use wattr on purpose
+  # do not use attr on purpose
   def read_ivar
     @ivar
   end

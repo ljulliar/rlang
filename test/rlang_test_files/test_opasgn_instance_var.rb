@@ -4,7 +4,7 @@ require 'rlang/lib'
 class Test
 
   # declare two ivar to make sure 
-  # wattr memory offset works 
+  # attr memory offset works 
   def initialize(arg)
     @ivar1 = arg
     @ivar2 = @ivar1 + 50
