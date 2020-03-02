@@ -62,7 +62,7 @@ Ruby features supported by Rlang are detailed in the [Rlang Manual](https://gith
 
 You can look at the rlang test suite in [test/rlang_test_files](https://github.com/ljulliar/rlang/blob/master/test/rlang_test_files/) to get a flavor of the subset of Ruby currently supported.
 
-For a more involved example of Ruby code, I invite you to look at the [dynamic memory allocator](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb) provided with the Rlang library.
+For a more involved example of Rlang code, I invite you to look at the [dynamic memory allocator](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb) provided with the Rlang library.
 
 ## The rlang compiler
 The Rlang compiler can be invoked through the `rlang` command. See the [Rlang Compiler Documentation](https://github.com/ljulliar/rlang/blob/master/docs/RlangCompiler.md) for more details about the command line options.
