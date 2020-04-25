@@ -11,7 +11,7 @@ Rlang source code &rarr; Rlang compiler &rarr; WebAssembly bytecode
 
 Rlang can be seen as a foundational language that can help you quickly develop and debug high performance WebAssembly modules. For the rationale behind the creation of Rlang see [below](#why-rlang).
 
-This is still a young project but Rlang has already been successfully tested with some real code such as the dynamic memory allocator provided with the Rlang library. It will keep mproving over time, always with the goal of generating crisp and uncluttered WebAssembly code.
+This is still a young project but Rlang has already been successfully tested with some real code such as the dynamic memory allocator provided with the Rlang library. It will keep improving over time, always with the goal of generating crisp and uncluttered WebAssembly code.
 
 If you want to help with Rlang see [How you can help](#how-you-can-help).
 
