@@ -1,10 +1,9 @@
-## 0.4.2
-* Class in class definition and module supported
-* Class inheritance
-
-## 0.4.1
+## 0.5.0
 * Class attributes syntac now identical to plain Ruby
 * Very preliminary version of Rlang String class
+* Class in class definition and module supported
+* Class inheritance
+* Basic array class
 
 ## 0.4.0
 * Object instances, instance methods and instance variables now supported
