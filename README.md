@@ -78,7 +78,9 @@ This project was created out of the need to develop a Virtual Machine written in
 
 After a first proof of concept written directly by hand in WebAssembly (WAT source code) it became clear that writing a full fledged VM directly in WebAssembly was going to be tedious, complex and unnecessarily painful.
 
-Sure I could have written this VM in any of the language that can already be compiled directly to WebAssembly (C, C++, Rust, Go,...) but being fond of Ruby since 2000 I decided that I would go for a compiler capable of transforming a subset of the Ruby language directly into WebAssembly with a minimum overhead. So in a nutshell: the goal of Rlang is to let you develop efficient WebAssembly code with a reasonably high level of abstraction while keeping the generated WebAssembly code straightforward and human readable.
+Sure I could have written this VM in any of the language that can already be compiled directly to WebAssembly (C, C++, Rust, Go,...) but being fond of Ruby since 2000 I decided that I would go for a compiler capable of transforming a subset of the Ruby language directly into WebAssembly with a minimum overhead.
+
+So in a nutshell: the goal of Rlang is to let you develop efficient WebAssembly code with a reasonably high level of abstraction while keeping the generated WebAssembly code straightforward,  human readable and slim.
 
 ## Why the name Rlang?
 Yes I hear you: Rlang is already the name of the R language so why use that name and aren't you introducing some confusion? Well for one I couldn't resist using that name to honor software engineering history (see below) and because, after all, the intersection between the Ruby/WebAssembly community and the R language community focused on data processing and machine learning must be quite small to say the least.
