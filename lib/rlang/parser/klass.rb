@@ -1,52 +1,25 @@
 # Rubinius WebAssembly VM
-# Copyright (c) 2019, Laurent Julliard and contributors
+# Copyright (c) 2019-2020, Laurent Julliard and contributors
 # All rights reserved.
 
 # Rlang classes
 require_relative '../../utils/log'
 require_relative './wtype'
+require_relative './const'
+require_relative './module'
 
 module Rlang::Parser
   # Note: Cannot use Class as class name
   # because it's already used by Ruby
-  class Klass
+  class Klass < Module
     include Log
 
-    attr_reader :wtype
-    attr_accessor :name, :wnode, :attrs, :ivars, :cvars, 
-                  :consts, :methods, :offset
+    attr_accessor   :super_class
 
-    def initialize(name)
-      @name = name
-      # the type of a class is its name by definition
-      @wtype = WType.new(name)
-      @size = 0
-      # the wnode implementing the code of the class
-      @wnode = nil
-      logger.debug "Klass created #{self.inspect}"
-      @attrs  = [] # class attributes
-      @ivars   = [] # instance variables
-      @cvars   = [] # class variables
-      @consts  = [] # class constants
-      @methods = [] # methods
-      @offset  = 0  # offset of the next class attribute in memory
+    def initialize(const, scope_class, super_class)
+      super(const, scope_class)
+      self.super_class = super_class
     end
 
-    def size
-      @offset
-    end
-
-    def wtype=(wtype)
-      @wtype = wtype
-      logger.debug "Klass #{@name} wtype updated: #{self.inspect}"
-    end
-
-    def wasm_name
-      @name
-    end
-
-    def wasm_type
-      @wtype.wasm_type
-    end
   end
 end

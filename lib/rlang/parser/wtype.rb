@@ -45,9 +45,26 @@ class WType
     wtypes[leading_idx]
   end
 
+  # Name is a symbol of the form :A or :"A::B" or :"A::B::C"
+  # or a string "A" or "A::B" or "A::B::C"
+  # or it can also be an array of symbols [:A], [:A, :B] or [:A, :B, :C]
+  # (It is not a class object)
   def initialize(name)
-    @name = name.to_sym
+    if name.is_a? Symbol
+      @name = name
+    elsif name.is_a? String
+      @name = name.to_sym
+    elsif name.is_a? Array
+      @name = name.map(&:to_s).join('::').to_sym
+    else
+      raise "Unknown type for WType name (got #{name}, class: #{name.class}"
+    end
     raise "Invalid WType #{name.inspect}" unless self.valid?
+  end
+
+  def class_path
+    return [] if self.blank?
+    name.to_s.split('::').map(&:to_sym)
   end
 
   def default?

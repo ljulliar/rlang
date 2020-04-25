@@ -12,6 +12,7 @@ require_relative './lvar'
 require_relative './attr'
 require_relative './method'
 require_relative './klass'
+require_relative './module'
 
 module Rlang::Parser
   class WNode
@@ -60,8 +61,9 @@ module Rlang::Parser
     }
 
     attr_accessor :type, :wargs, :children, :parent, :comment, 
-     :method, :template, :keep_on_stack, :classes
-    attr_reader :wtype, :label, :klass
+                  :method, :template, :keep_on_stack, :classes,
+                  :modules
+    attr_reader :wtype, :label, :klass, :module
 
     @@label_index = 0
 
@@ -82,16 +84,13 @@ module Rlang::Parser
       # means no value returned)
       @wtype = WType::DEFAULT
 
-      # For root wnode
-      @classes = [] # classes
       # top level class needed only if const are
       # defined at top level
       # NOTE: can't use create_klass as it find_class
       # which doesn't find root class ... endless loop!!
     
-      # For class wnode only
-      @@klass = nil
-      self.klass = Klass.new(:Top__) if self.root?
+      # For class or module wnode only
+      @klass = nil
 
       # For method wnode only
       @method = nil
@@ -192,16 +191,16 @@ module Rlang::Parser
       self
     end
 
-      # Reparent all children wnodes to another wnode
-      # (in the same order)
-      # WARNING!! Do not use self.children.each { } to
-      # reparent because we are modifying children list
-      # as we go
-      def reparent_children_to(wnode)
-        wnc = self.children
-        wnc.count.times { wnc.first.reparent_to(wnode) }
-        self
-      end
+    # Reparent all children wnodes to another wnode
+    # (in the same order)
+    # WARNING!! Do not use self.children.each { } to
+    # reparent because we are modifying children list
+    # as we go
+    def reparent_children_to(wnode)
+      wnc = self.children
+      wnc.count.times { wnc.first.reparent_to(wnode) }
+      self
+    end
 
     # insert a blank wnode above self, so between self wnode 
     # and its parent (self -> parent becomes self -> wn -> parent)
@@ -211,16 +210,22 @@ module Rlang::Parser
       wn
     end
 
+    # delete current wnode (which means
+    # basically remove it as a child)
+    def delete!
+      return if self.root? || self.parent.nil?
+      self.parent.remove_child(self)
+    end
+
     def klass=(klass)
       @klass = klass
       @klass.wnode = self
-      WNode.root.classes << klass
-      klass
+      @klass
     end
 
     # Find class name in this node and up the tree
     def class_name
-      (cn = self.class_wnode) ? cn.klass.name : nil
+      (cn = self.class_wnode) ? cn.klass.path_name : nil
     end
 
     # Find class size in this wnode or up the tree
@@ -228,108 +233,238 @@ module Rlang::Parser
       (cn = self.class_wnode) ? cn.klass.size : nil
     end
 
+    # Find the module object of the current wnode and up the tree
+    # if no name given
+    # or lookup the matching class from
+    # the root level if module name given
+    def find_module(module_path)
+      logger.debug "looking for #{module_path} module in scope #{self.scope}" # at wnode #{self}"
+      if modul = self.find_class_or_module_by_name(module_path)
+        logger.debug "Found module #{modul.name} / #{modul}"
+      else
+        logger.debug "Module #{module_path} not found"
+      end
+      modul
+    end
+
+    # Create a module object
+    def create_module(module_path)
+      # Create the constant associated to this module
+      klass = self.find_current_class_or_module()
+      logger.debug "Creating module #{module_path} in class #{klass} under wnode #{self.head}"
+      const = self.create_const(module_path, nil, WType.new(:Module))
+      modul = Module.new(const, klass)
+      # Add the constant to list of constants in current scope class
+      klass.consts << const
+      # Generate wnode
+      wnc = WNode.new(:module, self)
+      wnc.klass = modul
+      logger.debug "Created module #{modul.name}/ID:#{modul} under wnode #{wnc.parent} / ID: #{self.object_id}"
+      modul
+    end
+
+    def find_or_create_module(module_path)
+      self.find_module(module_path) || self.create_module(module_path)
+    end
+
+    # Return the first class/module up the tree
+    def find_current_class_or_module()
+      logger.debug "looking for current class in scope #{self.scope}  at wnode #{self.head(3)}"
+      if wn = self.class_or_module_wnode
+        k = wn.klass
+      elsif self.in_root_scope?
+        # methods defined at root level goes to Object Class
+        k = self.find_class_or_module_by_name([:Object])
+      end
+      if k
+        logger.debug "Found class #{k.name} / #{k}"
+      else
+        logger.debug "No current class found!"
+      end
+      k
+    end
+
+    # Find the class by doing a lookup on the constant
+    def find_class_or_module_by_name(class_path)
+      raise "Class name argument expected" unless class_path && !class_path.empty?
+      logger.debug "looking for class/module constant #{class_path} in scope #{self.scope} at wnode #{self.head}"
+      const = self.find_const(class_path)
+      #raise "Class or Module #{class_path} not found!" unless const
+      if const
+        logger.debug "Found constant #{const.name} pointing to #{const.value}"
+        const.value
+      else
+        logger.debug "Constant #{class_path} not found"
+        nil
+      end
+    end
+      
     # Find the class object of the current and up the tree
     # if no name given or lookup the matching class from
     # the root level if class name given
-    def find_class(class_name)
-      logger.debug "looking for class #{class_name ? class_name : 'current'} 
-        in scope #{self.scope} at wnode #{self}"
-      if class_name
-        c = WNode.root.classes.find { |c| 
-          logger.debug "**** looking for class #{class_name} in class object #{c} / #{c.name}"; c.name == class_name }
-      else
-        if self.in_root_scope?
-          # if at root level and no class name given
-          # then it's the top level class
-          c = self.class.root.klass
-        else
-          logger.debug "Looking for class wnode from wnode #{self} / ID: #{self.object_id} / 
-          type: #{self.type} / class_wnode ID #{self.class_wnode.object_id} / 
-          class_wnode #{self.class_wnode} /
-          self klass : #{self.klass} / 
-          self klass wtype : #{self.klass&.wtype} / "
-          c = self.class_wnode.klass
-        end
-      end    
-      if c
-        logger.debug "Found class #{c.name} / #{c}"
-      else
-        logger.debug "Class #{class_name} not found"
+    # class_path can be passed either as in a Symbol (e.g. :"A::B")
+    # or as an array of symbols (e.g. [:A, :B])
+    def find_class_or_module(class_path)
+      logger.debug "looking for #{class_path} class in scope #{self.scope} at wnode #{self.head}"
+      # turn the symbol form of class_path into the array form
+      if class_path.is_a? Symbol
+        class_path = class_path.to_s.split('::').map(&:to_sym)
       end
-      c
-    end
 
-    # Create a Class object. **NOTE** the self
-    # wnode must be the parent of the new class
-    def create_class(class_name)
-      wnc = WNode.new(:class, self)
-      wnc.klass = Klass.new(class_name)
-      logger.debug "Created class #{wnc.klass} under wnode #{self} / id: #{self.object_id}"
-      wnc.klass
-    end
-
-    def find_or_create_class(class_name)
-      self.find_class(class_name) || self.create_class(class_name)
-    end
-
-    # create a constant 
-    def create_const(c_name, class_name, value, wtype)
-      k = find_class(class_name)
-      logger.debug "Creating constant #{c_name} in class #{k&.name} / wtype: #{wtype} at wnode #{self.class_wnode}..."
-      if (cn = self.class_wnode)
-        cn.klass.consts << (const = Const.new(k.name, c_name, value, wtype))
+      if class_path.empty?
+        k = self.find_current_class_or_module()
       else
-        raise "No class found for class constant #{const}"
+        k = self.find_class_or_module_by_name(class_path)
+      end
+      if k
+        logger.debug "Found class #{k.name} / #{k}"
+      else
+        logger.debug "Class #{class_path} not found!"
+      end
+      k
+    end
+
+    # Create a Class object. The code below assumes
+    # the class doesn't exist
+    def create_class(class_path, super_class_path)
+      # check that super class exists
+      super_class = nil
+      unless super_class_path.empty?
+        super_class_const = self.find_const(super_class_path)
+        raise NameError, "uninitialized constant #{super_class_path}" \
+          unless super_class_const
+        super_class = super_class_const.scope_class
+      end
+
+      # Find current class or module (lexical scope)
+      # special case for Object class
+      if class_path == [:Object] && self.in_root_scope?
+        scope_class = nil
+      else
+        scope_class = self.find_current_class_or_module()
+      end
+
+      # Create the constant associated to this class
+      # the class itself
+      const = self.create_const(class_path, nil, WType.new(:Class))
+      k = Klass.new(const, scope_class, super_class)
+
+      # special case to bootstrap Object class
+      if class_path == [:Object] && self.in_root_scope?
+        const.scope_class = k
+      end
+
+      # create class wnode
+      wnc = WNode.new(:class, self)
+      wnc.klass = k
+      k.wnode = wnc
+      logger.debug "Created class #{k.name}/ID: #{k} under wnode #{self}/ ID: #{self.object_id}"
+      k
+    end
+
+    def find_or_create_class(class_path, super_class_path)
+      logger.debug "Find/Create class: #{class_path}"
+      if (km = self.find_class_or_module(class_path))
+        raise TypeError, "#{class_path} is not a class" unless km.const.class?
+      else
+        km = self.create_class(class_path, super_class_path)
+      end
+      km
+    end
+
+    # create a constant, relative to the current wnode
+    # the constant is assumed to not exist already
+    def create_const(c_path, value, wtype)
+      logger.debug "Creating constant #{c_path} / wtype: #{wtype} at wnode #{self.class_wnode.head}..."
+      raise "Dynamic constant assignment. Constant #{name} cannot be created in scope #{cmn.scope}" \
+        if self.in_method_scope?
+
+      # if const_path has more than one element then check 
+      # that all element but last already exist
+      !(c_prefix = c_path[0..-2]).empty? && self.find_const(c_prefix)
+      c_name = c_path.last
+      const = Const.new(c_name, value, wtype)
+    end
+
+    # Look for constant from where we are in wtree
+    # For a Ruby implementation of the constant lookup
+    # algo, see https://cirw.in/blog/constant-lookup
+    #  - c_path is an array of constant name elements
+    #    e.g. for constant A::B::C constant_path is [A, B, C]
+    def find_const(c_path)
+      logger.debug "looking for constant #{c_path}...from wnode #{self.head}..."
+      wn = self; idx = 0; count = c_path.size
+      while idx < count
+        const = wn._const_lookup(c_path[idx])
+        if const && (idx < count-1) && (const.class? || const.module?) && const.scope_class
+            wn = const.value.wnode
+        else
+          raise NameError, "uninitialized constant #{c_path.join('::')}" unless idx == count-1
+        end
+        idx += 1
       end
       const
     end
 
-    # Look for constant 
-    def find_const(c_name, class_name=nil)
-      logger.debug "looking for constant #{c_name} in class #{class_name ? class_name : 'current'} from wnode #{self}..."
-      k = find_class(class_name)
-      # Look for the constant both in current class and a roor class level
-      const = [k, @@root.klass].map(&:consts).flatten.find do |c| 
-        logger.debug "exploring constant #{c} / name: #{c.name} / class_name: #{c.class_name}";
-        c.name == c_name
+    def _const_lookup(name)
+      # build constant lookup path: lexical scope first
+      # excluding the 
+      mn = self.find_current_class_or_module()&.nesting
+      return nil unless mn
+      # do not use find_class_... to find the Object class
+      # This is to avoid and endless loop
+      oc = WNode.root.klass 
+      #oc = self.find_class_or_module_by_name([:Object])
+      logger.debug "Module/Class nesting: #{mn.map(&:name)}"
+      # and ancestors second
+      lookup_path = mn + (mn.first || oc).ancestors
+      lookup_path += oc.ancestors if (oc && mn.first.const.module?)
+      logger.debug "searching constant #{name} in path #{lookup_path.map(&:name)}..."
+      const = nil
+      lookup_path.find do |mod|
+        logger.debug "++ looking for const #{name} in #{mod.name}"
+        const = mod.const_get(name)
       end
       if const
-        logger.debug "Constant #{c_name} found in class #{k.name} at wnode #{k.wnode}..."
+        logger.debug "... found! in class #{const.scope_class&.name}"
       else
-        logger.debug "Constant #{c_name} not found in class #{k.name} or at top level..."
+        logger.debug "Constant #{name} not found in lookup path #{lookup_path.map(&:name)}..." \
       end
       const
     end
 
-    def find_or_create_const(c_name, class_name, value, wtype)
-      self.find_const(c_name, class_name) || self.create_const(c_name, class_name, value, wtype)
+    # find or create constant, relative to current wnode
+    def find_or_create_const(c_path, class_name, value, wtype)
+      self.find_const(c_path) || self.create_const(c_path, value, wtype)
     end
 
-    def find_attr(name, class_name=nil)
-      k = find_class(class_name)
+    # find attr in current class
+    def find_attr(name)
+      k = self.find_current_class_or_module()
       raise "Can't find parent class for attr #{name}" unless k
       logger.debug "looking for attr #{name} in class #{k.name} at wnode #{self.class_wnode}..."
-      k.attrs.find { |a| a.class_name == k.name && a.name == name }
+      k.attrs.find { |a| a.klass == k && a.name == name }
     end
 
     def create_attr(name, wtype=WType::DEFAULT)
-      if (cn = self.class_wnode)
-        logger.debug "creating attr #{name} in class #{self.class_name} at wnode #{self.class_wnode}..."
-        cn.klass.attrs << (_attr = Attr.new(cn, name, wtype))
+      if (k = self.find_current_class_or_module())
+        logger.debug "creating attr #{name} in class #{k.name} at wnode #{k.wnode}..."
+        k.attrs << (_attr = Attr.new(k, name, wtype))
       else
         raise "No class found for class attribute #{name}"
       end
       _attr
     end
 
-    def find_or_create_attr(name, class_name=nil, wtype=WType::DEFAULT)
-      find_attr(name, class_name) || create_attr(name, wtype)
+    # find or create attr in current class
+    def find_or_create_attr(name, wtype=WType::DEFAULT)
+      find_attr(name) || create_attr(name, wtype)
     end
 
     def create_ivar(iv_name, wtype=WType::DEFAULT)
-      if (cn = self.class_wnode)
+      if (k = self.find_current_class_or_module())
         logger.debug "creating ivar #{iv_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
-        cn.klass.ivars << (ivar = IVar.new(cn, iv_name, wtype))
+        k.ivars << (ivar = IVar.new(k, iv_name, wtype))
       else
         raise "No class found for instance variable #{iv_name}"
       end
@@ -337,10 +472,10 @@ module Rlang::Parser
     end
 
     def find_ivar(iv_name, class_name=nil)
-      klass = find_class(class_name)
-      raise "Can't find parent class for ivar #{iv_name}" unless klass
-      logger.debug "looking for ivar #{iv_name} in class #{class_name} at wnode #{self.class_wnode}..."
-      self.class_wnode.klass.ivars.find { |iv| iv.class_name == klass.name && iv.name == iv_name }
+      k = self.find_current_class_or_module()
+      raise "Can't find parent class for ivar #{iv_name}" unless k
+      logger.debug "looking for ivar #{iv_name} in class #{k.name} at wnode #{self.class_wnode}..."
+      self.class_wnode.klass.ivars.find { |iv| iv.klass == k && iv.name == iv_name }
     end
 
     def find_or_create_ivar(iv_name)
@@ -350,7 +485,7 @@ module Rlang::Parser
     def create_cvar(cv_name, value=0, wtype=WType::DEFAULT)
       if (cn = self.class_wnode)
         logger.debug "creating cvar #{cv_name} in class #{self.class_name} at wnode #{self.class_wnode}..."
-        cn.klass.cvars << (cvar = CVar.new(cn.klass.name, cv_name, value, wtype))
+        cn.klass.cvars << (cvar = CVar.new(cn.klass, cv_name, value, wtype))
       else
         raise "No class found for class variable #{cv_name}"
       end
@@ -394,44 +529,51 @@ module Rlang::Parser
     end
 
     # method_type is either :instance or :class
-    def create_method(method_name, class_name, wtype, method_type)
-      if (m = find_method(method_name, class_name, method_type))
-        raise "MEthod already exists: #{m.inspect}"
-      end
-      if (cn = self.class_wnode)
-        class_name ||= cn.klass.name
-        cn.klass.methods << (method = MEthod.new(method_name, class_name, wtype, method_type))
-      else
-        raise "No class wnode found to create method #{method_name}"
-      end
-      logger.debug "Created MEthod: #{method}"
-      method
+    def create_method(klass, method_name, method_type, wtype, local=false)
+      logger.debug "Create #{method_type} method #{method_name} in class #{class_name || 'current'} / wtype: #{wtype}"
+      wtype ||= WType::DEFAULT
+
+      # see if method already created
+      m = find_method(klass, method_name, method_type, local)
+      raise "Method already exists: #{class_name},#{m.name} / ID: #{m}" if m
+
+      # Go create method
+      km = klass || self.find_current_class_or_module()
+      km.methods << (m = MEthod.new(method_name, km, wtype, method_type))
+      logger.debug "++++ adding #{method_type} method #{m.name}/ID:#{m} in class #{km.name}/ID:#{km}"
+      logger.debug "#{km.methods.count} methods in class #{km.name}/#{km}"
+      m
     end
 
     # method_type is either :instance or :class
-    def find_method(method_name, class_name, method_type)
-      logger.debug "looking for #{method_type} method '#{method_name}' in class name '#{class_name}' from wnode #{self}"
-      k = self.find_class(class_name)
-      return nil unless k
-      if method_type == :class
-        method = k.methods.find { |m| m.name == method_name && m.class_name == k.name && m.class? }
-      elsif method_type == :instance
-        method = k.methods.find { |m| m.name == method_name && m.class_name == k.name && m.instance? }
-      else
-        raise "Unknown method type : #{method_type.inspect}"
+    # if local is true look for method in the current class only
+    def find_method(klass, method_name, method_type, local=false)
+      logger.debug "looking #{local ? 'locally' : 'globally'} for #{method_type} method #{method_name} in class #{klass}" #from wnode #{self.head(2)}"
+      km = klass || self.find_current_class_or_module()
+      raise "Couldn't find scope class/module where to search for method #{method_name}" unless km
+
+      class_hierarchy = (local ? [km] : km.ancestors)
+      logger.debug "searching #{method_type} method #{method_name} in ancestors #{class_hierarchy.map(&:name)}..."
+      method = nil
+      class_hierarchy.each do |k|
+        logger.debug "Currently #{k.methods.count} method(s) in class #{k.name}/#{k}"
+        method = k.methods.find do |m| 
+          logger.debug "++ looking for #{method_type} method #{k.name}/#{method_name} in #{m.klass.name}/#{m.name}/#{m.method_type}"
+          m.name == method_name && m.klass == k && m.method_type == method_type
+        end
+        break if method
       end
       if method
-        logger.debug "Found #{method_type} MEthod: #{k.name},#{method}"
+        logger.debug "Found #{method_type} method: #{km.name},#{method.name} in #{method.klass.name}"
       else
-        logger.debug "Couldn't find #{method_type} MEthod: #{k.name},#{method_name}"
+        logger.debug "Couldn't find #{method_type} method: #{km.name},#{method_name}"
       end
       method
     end
 
-    def find_or_create_method(method_name, class_name, wtype, method_type)
-      wtype ||= WType::DEFAULT
-      self.find_method(method_name, class_name, method_type) || \
-      self.create_method(method_name, class_name, wtype, method_type)
+    def find_or_create_method(klass, method_name, method_type, wtype, local=false)
+      self.find_method(klass, method_name, method_type, local) || 
+      self.create_method(klass, method_name, method_type, wtype, local)
     end
 
     # Find block wnode up the tree
@@ -452,12 +594,31 @@ module Rlang::Parser
       end
     end
 
+    # Find module wnode up the tree
+    def module_wnode
+      if self.module?
+        self
+      else
+        @parent ? @parent.module_wnode : nil
+      end
+    end
+
     # Find class wnode up the tree
     def class_wnode
       if self.class?
         self
       else
         @parent ? @parent.class_wnode : nil
+      end
+    end
+
+    # Find class or module wnode up the tree
+    # which ever come first
+    def class_or_module_wnode
+      if self.class? || self.module?
+        self
+      else
+        @parent ? @parent.class_or_module_wnode : nil
       end
     end
 
@@ -474,6 +635,7 @@ module Rlang::Parser
       return :class_method if self.in_class_method_scope?
       return :instance_method if self.in_instance_method_scope?
       return :class if self.in_class_scope?
+      return :module if self.in_module_scope?
       return :root if self.in_root_scope?
     end
 
@@ -482,19 +644,23 @@ module Rlang::Parser
     end
 
     def in_class_method_scope?
-      !self.method_wnode.nil? && !self.method_wnode.method.instance?
+      self.in_method_scope? && self.method_wnode.method.class?
     end
 
     def in_instance_method_scope?
-      !self.method_wnode.nil? && self.method_wnode.method.instance?
+      self.in_method_scope? && self.method_wnode.method.instance?
     end
 
     def in_class_scope?
-      !self.class_wnode.nil? && self.method_wnode.nil?
+      !self.class_wnode.nil? && !self.in_method_scope?
+    end
+
+    def in_module_scope?
+      !self.module_wnode.nil? && !self.in_method_scope?
     end
 
     def in_root_scope?
-      self.root? || (self.parent.root? && !in_class_scope?)
+      self.root? || (self.parent.root? && !self.in_class_scope?)
     end
 
     def method?
@@ -502,7 +668,12 @@ module Rlang::Parser
     end
 
     def class?
+      # root always has the Object class associated
       self.type == :class || self.type == :root 
+    end
+
+    def module?
+      self.type == :module
     end
 
     # format the wnode and tree below
@@ -510,6 +681,10 @@ module Rlang::Parser
     # not valid WAT code 
     def to_s(indent=0)
       "\n%sw(%s:%s" % [' '*2*indent, self.type, self.wasm_code] + self.children.map { |wn| wn.to_s(indent+1) }.join('') + ')'
+    end
+
+    def head(n=5)
+      (self.to_s.lines[0,n] << "...\n").join('')
     end
 
     # Generate WAT code starting for this node and tree branches below
@@ -521,7 +696,7 @@ module Rlang::Parser
         else
           "\n%s(%s" % [' '*2*indent, self.wasm_code] + self.children.map { |wn| wn.transpile(indent+1) }.join('') + ')'
         end
-      when :root, :class, :none
+      when :root, :class, :module, :none
         # no WAT code to generate for these nodes. Process children directly.
         self.children.map { |wn| wn.transpile(indent) }.join('')
       else

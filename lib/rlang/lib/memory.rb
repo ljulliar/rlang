@@ -1,4 +1,9 @@
-require 'rlang/lib/type'
+# Rubinius WebAssembly VM
+# Copyright (c) 2019-2020, Laurent Julliard and contributors
+# All rights reserved.
+#
+# Web Assembly memory access methods
+#
 
 class Memory
 
@@ -25,5 +30,100 @@ class Memory
       idx += 1
     end
   end
-  
+
+  def self.load32_8(addr)
+    arg addr: :I32
+    result :I32
+    inline wat: '(i32.load8_u (local.get $addr))',
+           wtype: :I32
+  end
+
+  def self.load32_16(addr)
+    arg addr: :I32
+    result :I32
+    inline wat: '(i32.load16_u (local.get $addr))',
+           wtype: :I32
+  end
+
+  def self.load32(addr)
+    arg addr: :I32
+    result :I32
+    inline wat: '(i32.load (local.get $addr))',
+           wtype: :I32
+  end
+
+  def self.load64_8(addr)
+    arg addr: :I32
+    result :I64
+    inline wat: '(i64.load8_u (local.get $addr))',
+           wtype: :I64
+  end
+
+  def self.load64_16(addr)
+    arg addr: :I32
+    result :I64
+    inline wat: '(i64.load16_u (local.get $addr))',
+           wtype: :I64
+  end
+  def self.load64_32(addr)
+    arg addr: :I32
+    result :I64
+    inline wat: '(i64.load32_u (local.get $addr))',
+           wtype: :I64
+  end
+  def self.load64(addr)
+    arg addr: :I32
+    result :I64
+    inline wat: '(i64.load (local.get $addr))',
+           wtype: :I64
+  end
+
+  def self.store32_8(addr, value)
+    arg addr: :I32, value: :I32
+    result :none
+    inline wat: '(i32.store8 (local.get $addr) (local.get $value))',
+           wtype: :none
+  end
+
+  def self.store32_16(addr, value)
+    arg addr: :I32, value: :I32
+    result :none
+    inline wat: '(i32.store16 (local.get $addr) (local.get $value))',
+           wtype: :none
+  end
+
+  def self.store32(addr, value)
+    arg addr: :I32, value: :I32
+    result :none
+    inline wat: '(i32.store (local.get $addr) (local.get $value))',
+           wtype: :none
+  end
+
+  def self.store64_8(addr, value)
+    arg addr: :I32, value: :I64
+    result :none
+    inline wat: '(i64.store8 (local.get $addr) (local.get $value))',
+           wtype: :none
+  end
+
+  def self.store64_16(addr, value)
+    arg addr: :I32, value: :I64
+    result :none
+    inline wat: '(i64.store16 (local.get $addr) (local.get $value))',
+           wtype: :none
+  end
+
+  def self.store64_32(addr, value)
+    arg addr: :I32, value: :I64
+    result :none
+    inline wat: '(i64.store32 (local.get $addr) (local.get $value))',
+           wtype: :none
+  end
+
+  def self.store64(addr, value)
+    arg addr: :I32, value: :I64
+    result :none
+    inline wat: '(i64.store (local.get $addr) (local.get $value))',
+           wtype: :none
+  end
 end

@@ -151,11 +151,13 @@ class RlangMallocTest < Minitest::Test
     assert_equal @exports.unistd_c_sbrk(0) - 8, ptr
 
     # Free chain should look like this
+    # (replace base_addr with the memory address of the @@base Header)
     # freep: 20 -> @20 (ptr: 10024, size: 0) -> @10024 (ptr: 20, size: 1022)
+    base_addr = 56
     log_free_chain("after malloc")
     
     freep = @exports.malloc_c_freep
-    assert_equal 20, freep
+    assert_equal 56, freep
     assert_equal @exports.global_c_heap, @exports.header_i_ptr(freep)
     assert_equal 0, @exports.header_i_size(freep)
     assert_equal freep, @exports.header_i_ptr(@exports.header_i_ptr(freep))

@@ -1,17 +1,17 @@
 class Test
 
-  # call with implicit self on class
-  def self.instance_m1(arg)
-    instance_m2(arg) + 20
+  def self.instance_m3(arg)
+    arg * 10
   end
-  
+
   # call with explicit self on class
   def self.instance_m2(arg)
     self.instance_m3(arg) * 100
   end
 
-  def self.instance_m3(arg)
-    arg * 10
+  # call with implicit self on class
+  def self.instance_m1(arg)
+    instance_m2(arg) + 20
   end
 
   # Fake instance method to make sure

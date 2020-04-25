@@ -8,6 +8,7 @@
 # srbk(0) returns the current value of the break
 # Note: in WASM we can only grow linear memory by pages (64 KB block)
 
+require_relative './memory'
 
 # These 3 global variables below are used by the
 # dynamic memory allocator. You can redefine them
@@ -27,8 +28,6 @@ $HEAP_MAX_SIZE = 1073741824  # 1GB
 $HEAP_SIZE = 0
 
 class Unistd
-  result :Memory, :grow, :I32
-  result :Memory, :size, :I32
 
   def self.sbrk(n)
     # local variables used. All default type

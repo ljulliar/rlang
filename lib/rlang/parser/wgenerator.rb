@@ -12,6 +12,9 @@
 
 require_relative '../../utils/log'
 require_relative './wnode'
+require_relative './klass'
+require_relative './module'
+require_relative './module'
 
 module Rlang::Parser
 
@@ -67,10 +70,10 @@ module Rlang::Parser
 
   # new template when object size > 0
   NEW_TMPL = %q{
-  result :Object, :alloc, :%{default_wtype}
+  result :Object, :allocate, :%{default_wtype}
   def self.new(%{margs})
-    result :%{class_name}
-    object_ptr = Object.alloc(%{class_name}._size_).cast_to(:%{class_name})
+    result :"%{class_name}"
+    object_ptr = Object.allocate(%{class_name}._size_).cast_to(:"%{class_name}")
     object_ptr.initialize(%{margs})
     return object_ptr
   end
@@ -80,14 +83,13 @@ module Rlang::Parser
   # use 0 as the _self_ address in memory. It should never
   # be used anyway
   NEW_ZERO_TMPL = %q{
-    result :Object, :alloc, :%{default_wtype}
-    def self.new(%{margs})
-      result :%{class_name}
-      object_ptr = 0.cast_to(:%{class_name})
-      object_ptr.initialize(%{margs})
-      return object_ptr
-    end
-    }
+  def self.new(%{margs})
+    result :"%{class_name}"
+    object_ptr = 0.cast_to(:"%{class_name}")
+    object_ptr.initialize(%{margs})
+    return object_ptr
+  end
+  }
 
   # Do nothing initialize method
   DUMB_INIT_TMPL = %q{
@@ -117,18 +119,122 @@ module Rlang::Parser
       @root = WTree.new().root
       @new_count = 0
       @static_count = 0
+
+      # define Object class and Kernel modules
+      # and include Kernel in Object
+      wn_object_class = self.klass(@root, [:Object], [])
+      @object_class = wn_object_class.klass
+      @root.klass = @object_class
+      wn_kernel_module = self.module(@root, [:Kernel])
+      self.include(wn_object_class, [:Kernel])
+
+      # Create Class and Module classes
+      # And Class inherits from module
+      self.klass(@root, [:Module], [:Object])
+      self.klass(@root, [:Class], [:Module])
     end
 
-    def klass(wnode, class_name)
+    # Create class and its basic methods (new, initialize and _size_)
+    def klass(wnode, class_path, super_class_path)
+      logger.debug "Defining klass #{class_path} < #{super_class_path}"
+      # See if class already created
+      if (k = wnode.find_class_or_module(class_path))
+        return k.wnode
+      end
+
+      # Make sure super class is known like Ruby does
+      if super_class_path.empty?
+        # special case to bootstrap Object class
+        if (class_path == [:Object] && wnode.in_root_scope?)
+          sk = nil
+        else
+          sk = @object_class
+          super_class_path << sk.path_name
+        end
+      else
+        sk = wnode.find_class_or_module(super_class_path)
+        raise "Unknown super class #{super_class_path}" unless sk
+      end
       # Create class object and class wnode if it doesn't exist yet
-      k = wnode.find_or_create_class(class_name)
-      # Create the Class.new method object too (not 
-      # the code yet in case the end user code defines
-      # its own implementation in the class body)
-      k.wnode.find_or_create_method(:new, k.name, k.wtype, :class)     
+      # only one level deep class for now so scope class is always
+      # Object class
+      if (class_path == [:Object] && wnode.in_root_scope?)
+        k = wnode.create_class(class_path, super_class_path)
+      else
+        k = wnode.find_or_create_class(class_path, super_class_path)
+      end
+      # make sure the super class is correct in case class
+      # was previously declared in a result directive where
+      # no super class can be specified
+      k.super_class = sk if sk
+      # Create methods Class::new, Class#initialize and Class::_size_
+      # (do not generate the code yet as the end user code may 
+      # define its own implementation in the class body)
+      k.wnode.find_or_create_method(k, :new, :class, k.wtype, true)
+      k.wnode.find_or_create_method(k, :_size_, :class, WType::DEFAULT, true)    
+      k.wnode.find_or_create_method(k, :initialize, :instance, WType.new(:none), true)    
       k.wnode
     end
 
+    # Create module object and module wnode 
+    # if it doesn't exist yet
+    def module(wnode, module_path)
+      m = wnode.find_or_create_module(module_path)
+      m.wnode
+    end
+
+    def include(wnode, module_path)
+      m = wnode.find_module(module_path)
+      raise "Unknown module #{module_path}. Please require module first." \
+        unless m
+      wnc = wnode.class_or_module_wnode
+      raise "Cannot find scope class/module for included module!!" unless wnc
+      wnc.klass.include(m) 
+      m.included!
+      wnc
+    end
+
+    def prepend(wnode, module_path)
+      m = wnode.find_module(module_path)
+      raise "Unknown module #{module_path}. Please require module first." \
+        unless m
+      wnc = wnode.class_or_module_wnode
+      raise "Cannot find scope class/module for prepended module!!" unless wnc
+      wnc.klass.prepend(m) 
+      m.prepended!
+      wnc
+    end
+
+    def extend(wnode, module_path)
+      m = wnode.find_module(module_path)
+      raise "Cannot find module #{module_path}. Please require module first." \
+        unless m
+      wnc = wnode.class_or_module_wnode
+      raise "Cannot find scope class/module for included module!!" unless wnc
+      wnc.klass.extend(m)
+      m.extended!
+      wnc
+    end
+
+    # Ahead of time method declaration and return type
+    # Create corresponding classes and method objects as we known we'll
+    # be calling them later on
+    def declare_method(wnode, wtype, method_name, result_type)
+      class_path = wtype.class_path
+      logger.debug "Declaring method #{method_name} in class #{class_path}"
+      klass = WNode.root.find_or_create_class(class_path, [])
+      if method_name[0] == '#'
+        method_type = :instance
+        mth_name = method_name[1..-1].to_sym
+      else
+        method_type = :class
+        mth_name = method_name.to_sym
+      end
+      (m = wnode.find_or_create_method(klass, mth_name, method_type, nil)).wtype = WType.new(result_type)
+      logger.debug "Declared #{method_type} method #{m.name} in class #{m.klass.name} with wtype #{m.wtype.name}"
+      m
+    end
+  
     # Postprocess ivars
     # (called at end of class parsing)
     def ivars_setup(wnode)
@@ -147,11 +253,12 @@ module Rlang::Parser
     # generate code for class attributes
     # (called at end of class parsing)
     def def_attr(wnode)
-      wnc = wnode.class_wnode
+      klass = wnode.find_current_class_or_module()
+      wnc = klass.wnode
       raise "Cannot find class for attributes definition!!" unless wnc
       # Process each declared class attribute
-      wnc.klass.attrs.each do |attr|
-        logger.debug("Generating accessors for attribute #{wnc.klass.name}\##{attr.name}")
+      klass.attrs.each do |attr|
+        logger.debug("Generating accessors for attribute #{klass.name}\##{attr.name}")
         # Generate getter and setter methods wnode
         # unless method already implemented by user
         if attr.setter
@@ -173,9 +280,9 @@ module Rlang::Parser
       # Also generate the Class::_size_ method
       # (needed for dynamic memory allocation
       #  by Object.allocate)
-      size_method = wnc.find_or_create_method(SIZE_METHOD, wnc.klass.name, WType::DEFAULT, :class)
+      size_method = wnc.find_or_create_method(klass, SIZE_METHOD, :class, WType::DEFAULT)
       unless size_method.wnode
-        logger.debug("Generating #{size_method.class_name}\##{size_method.name}")
+        logger.debug("Generating #{size_method.klass.name}\##{size_method.name}")
         wns = WNode.new(:insn, wnc, true)
         wns.wtype = WType::DEFAULT 
         wns.c(:class_size, func_name: size_method.wasm_name, 
@@ -204,28 +311,24 @@ module Rlang::Parser
       wn_get
     end
 
-    def instance_method(wnode, method)
-      logger.debug("Generating wnode for instance method #{method.inspect}")
+    def def_method(wnode, method_name, method_type)
+      logger.debug("Defining #{method_type} method #{method_name}...")
+      if (method = wnode.find_method(nil, method_name, method_type, true))
+        logger.warn "Redefining #{method.klass.name},#{method_name}" if method.wnode
+      else
+        method = wnode.create_method(nil, method_name, method_type, nil, true)
+      end
+      # Generate method definition wnode
+      logger.debug("Generating wnode for #{method_type} method #{method_name}")
       wn = WNode.new(:method, wnode)
       method.wnode = wn
-      wn.method = method # must be set before calling func_name
       wn.wtype = method.wtype
       wn.c(:func, func_name: wn.method.wasm_name)
-      # Also declare a "hidden" parameter representing the
-      # pointer to the instance (always default wtype)
-      wn.create_marg(:_self_)
-      logger.debug("Building instance method: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
-      wn
-    end
-
-    def class_method(wnode, method)
-      logger.debug("Generating wnode for class method #{method}")
-      wn = WNode.new(:method, wnode)
-      method.wnode = wn
-      wn.method = method # must be set before calling func_name
-      wn.wtype = method.wtype
-      wn.c(:func, func_name: wn.method.wasm_name)
-      logger.debug("Building class method: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
+      # On instance method also declare a first parameter
+      # called _self_ representing the pointer to the
+      # object instance
+      wn.create_marg(:_self_) if method.instance?
+      logger.debug("Building #{method_type} method: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
       wn
     end
 
@@ -273,7 +376,7 @@ module Rlang::Parser
       wn
     end
 
-    # Get class variable
+    # Get constant
     def const(wnode, const)
       (wn = WNode.new(:insn, wnode)).wtype = const.wtype
       wn.c(:load, wtype: const.wtype, var_name: const.wasm_name)
@@ -298,7 +401,7 @@ module Rlang::Parser
     # Call setter (on attr or instance variable)
     # This is the same as calling the corresponding setter
     def call_setter(wnode, wnode_recv, attr)
-      wn = self.call(wnode, wnode_recv.wtype.name, attr.setter_name, :instance)
+      wn = self.send_method(wnode, wnode_recv.wtype, attr.setter_name, :instance)
       # First argument of the setter must be the receiver
       wnode_recv.reparent_to(wn)
       wn
@@ -307,7 +410,7 @@ module Rlang::Parser
     # Call getter (on attr or instance variable)
     # This is the same as calling the corresponding getter
     def call_getter(wnode, wnode_recv, attr)
-      wn = self.call(wnode, wnode_recv.wtype.name, attr.getter_name, :instance)
+      wn = self.send_method(wnode, wnode_recv.wtype, attr.getter_name, :instance)
       # First argument of the getter must always be the receiver
       wnode_recv.reparent_to(wn)
       wn
@@ -402,7 +505,7 @@ module Rlang::Parser
 
     # Static new string object
     def string_static_new(wnode, string)
-      klass = wnode.find_class(nil)
+      klass = wnode.find_current_class_or_module()
       data_label = "#{klass.name}_string_#{@static_count += 1}"
       # Statically 
       data_stg = self.string_static(string, data_label)
@@ -418,16 +521,16 @@ module Rlang::Parser
 
     # Dynamic new string object
     def string_dynamic_new(wnode, string)
-      klass = wnode.find_class(nil)
+      klass = wnode.find_current_class_or_module()
       data_label = "#{klass.name}_string_#{@static_count += 1}"
       data_stg = self.string_static(string, data_label)
       string_new_source = STRING_NEW_TMPL % {
-        string: string,
         ptr: data_stg.address,
         length: string.length
       }
       #puts string_new_source;exit
       wn_string = self.parser.parse(string_new_source, wnode)
+      #puts wn_string; exit
     end
 
     # All the cast_xxxx methods below returns
@@ -503,25 +606,6 @@ module Rlang::Parser
       wn_cast_op
     end
 
-    # before generating native operator Wasm code check
-    # if the operator was overloaded
-    def send_method(wnode, method_name, wtype=WType.new(:none))
-      class_name = wtype.name
-      if wnode.find_method(method_name, class_name, :instance)
-        # it's an instance method call
-        logger.debug "Overloaded operator #{method_name} found in class #{class_name}"
-        wn_op = self.call(wnode, class_name, method_name, :instance)
-      else
-        # it's a native Wasm operator
-        if ALL_OPS_MAP.has_key? method_name
-          wn_op = self.native_operator(wnode, method_name, wtype)
-        else
-          raise "Unknown method '#{method_name}' in class #{class_name}"
-        end
-      end
-      wn_op
-    end
-
     # just create a wnode for the WASM operator
     # Do not set wtype or a code template yet,
     # wait until operands type is known (see
@@ -592,10 +676,10 @@ module Rlang::Parser
 
     # Statically allocate an object in data segment
     # with the size of the class
-    def static_new(wnode, class_name)
-      klass = wnode.find_class(class_name)
+    def static_new(wnode, class_path)
+      klass = wnode.find_class_or_module(class_path)
       if klass.size > 0
-        data_label = "#{class_name}_new_#{@new_count += 1}"
+        data_label = "#{klass.path_name}_new_#{@new_count += 1}"
         data = DAta.new(data_label.to_sym, "\x00"*klass.wnode.class_size)
         address = data.address
       else
@@ -606,50 +690,66 @@ module Rlang::Parser
       end
       (wn_object_addr = WNode.new(:insn, wnode)).c(:addr, value: address)
       # VERY IMPORTANT the wtype of this node is the Class name !!!
-      wn_object_addr.wtype = WType.new(class_name.to_sym)
+      wn_object_addr.wtype = WType.new(klass.path_name)
       wn_object_addr
     end
 
     # Create the dynamic new method. It allocates memory
     # for the object created and calls initialize
     def def_new(wnode_class)
-      # no new method for native types
+      k = wnode_class.find_current_class_or_module()
+      logger.debug "Defining new method for #{k.name}"
+      # no need to define new method for native types
       return if wnode_class.klass.wtype.native?
-      new_method = wnode_class.find_method(:new, wnode_class.class_name, :class)
-      return if new_method.wnode # already implemented
-
-      init_method = wnode_class.find_method(:initialize, wnode_class.class_name, :instance)
-      logger.debug "Creating code for #{wnode_class.class_name}.new"
+      if (new_mth = wnode_class.find_method(k, :new, :class, true))
+        return if new_mth.wnode # already implemented
+      end
+      
+      logger.debug "Creating code for #{k.name}.new"
+      # Find initialize method and use the same method args for new
+      init_method = wnode_class.find_method(k, :initialize, :instance, true)
       new_tmpl = wnode_class.class_size.zero? ? NEW_ZERO_TMPL : NEW_TMPL
       new_source = new_tmpl % {
         default_wtype: WType::DEFAULT.name,
-        class_name: wnode_class.class_name,
+        class_name: k.path_name,
         # Do not pass _self_ argument to the new method of course !!
         margs: init_method.margs.reject {|ma| ma._self_?}.map(&:name).join(', '), 
         class_size: wnode_class.class_size
       }
-      new_method.wnode = self.parser.parse(new_source, wnode_class)
+      new_mth.wnode = self.parser.parse(new_source, wnode_class)
     end
 
     # Define a dumb initialize method if not implemented
     # already in user code
     def def_initialize(wnode_class)
+      k = wnode_class.find_current_class_or_module()
       # no new/initialize method for native types
-      return if WType.new(wnode_class.class_name).native? 
+      return if WType.new(k.path_name).native? 
       # generate code for a dumb initialize method if not defined
       # in user code
-      unless wnode_class.find_method(:initialize, wnode_class.class_name, :instance)
-        logger.debug "Creating MEthod and code for #{wnode_class.class_name}#initialize"
-        init_source = DUMB_INIT_TMPL
-        self.parser.parse(init_source, wnode_class)
+      if (init_mth = wnode_class.find_method(k, :initialize, :instance, true))
+        return if init_mth.wnode # already implemented
       end
+      logger.debug "Creating MEthod and code for #{k.name}#initialize"
+      init_source = DUMB_INIT_TMPL
+      init_mth.wnode = self.parser.parse(init_source, wnode_class)
     end
 
-    def call(wnode, class_name, method_name, method_type)
-      method = wnode.find_or_create_method(method_name, class_name, nil, method_type)
-      logger.debug "found method #{method}"
-      (wn_call = WNode.new(:insn, wnode)).c(:call, func_name: method.wasm_name)
-      wn_call.wtype = method.wtype
+    # generate code for method call
+    def send_method(wnode, class_path, method_name, method_type)
+      logger.debug "In call generator for #{class_path}::#{method_name}"
+      k = wnode.find_class_or_module(class_path)
+      if k && (method = wnode.find_method(k, method_name, method_type))
+        logger.debug "Found method #{method.name} in class #{method.klass.name}"
+        (wn_call = WNode.new(:insn, wnode)).c(:call, func_name: method.wasm_name)
+        wn_call.wtype = method.wtype
+        wn_call
+      elsif ALL_OPS_MAP.has_key? method_name
+        # it's a native Wasm operator
+        wn_call = self.native_operator(wnode, method_name, WType.new(class_path))
+      else
+        raise "Unknown method '#{method_name}' in class #{class_path}"
+      end
       wn_call
     end
 

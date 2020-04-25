@@ -13,22 +13,29 @@ module Rlang::Parser
   class MEthod
     include Log
 
-    attr_reader :name, :wtype
-    attr_accessor :class_name, :margs, :lvars, :wnode
+    attr_reader :name, :wtype, :method_type, :wnode
+    attr_accessor :klass, :margs, :lvars
 
-    METHOD_TYPES = [:class, :instance]
+    METHOD_TYPES = [:instance, :class]
 
-    def initialize(name, class_name, wtype, method_type)
+    def initialize(name, klass, wtype, method_type)
       raise "Wrong method wtype argument: #{wtype.inspect}" unless wtype.is_a? WType
       @name = name
-      @class_name = class_name
+      @klass = klass
       @wtype = wtype || WType::DEFAULT
       @method_type = method_type
       raise "Unknown method type: #{method_type}" unless METHOD_TYPES.include? @method_type
-      @wnode = nil # wnode where method is implemented
-      logger.debug "Method created #{self.inspect}"
+      @wnode = nil  # wnode where this method is implemented
+      logger.debug "Method created #{name} in class #{klass.name} / ID:#{self}"
       @margs = []   # method args
       @lvars = []   # local variables
+    end
+
+    # Setup bidirectional links between
+    # wnode and method
+    def wnode=(wnode)
+      @wnode = wnode
+      wnode.method = self
     end
 
     def implemented?
@@ -58,10 +65,12 @@ module Rlang::Parser
     end
 
     def wasm_name
+      # [] method name is illegal in Wasm function name
+      name = @name.to_s.sub(/\[\]/, 'brackets').to_sym
       if self.instance?
-        "$#{@class_name}##{@name}"
+        "$#{@klass.path_name}##{name}"
       else
-        "$#{@class_name}::#{@name}"
+        "$#{@klass.path_name}::#{name}"
       end
     end
 
@@ -70,10 +79,12 @@ module Rlang::Parser
     end
 
     def export_name
+      # [] method name is illegal in Wasm function name
+      name = @name.to_s.sub(/\[\]/, 'brackets').to_sym
       if self.instance?
-        "#{@class_name.downcase}_i_#{@name}"
+        "#{@klass.path_name.downcase}_i_#{name}"
       else
-        "#{@class_name.downcase}_c_#{@name}"
+        "#{@klass.path_name.downcase}_c_#{name}"
       end
     end
 

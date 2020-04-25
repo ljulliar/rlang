@@ -30,9 +30,10 @@ $NALLOC = 1024
 
 # Allocate some unused memory space to make 
 # sure so that freep doesn't point to memory
-# address 0 because it has a sepcial meaning
-# Allocate 20 bytes (5 x I32 integers)
-DAta[:dummy_malloc_data] = [0, 0, 0, 0, 0]
+# address 0 because it has a special meaning
+# Allocate 20 bytes (4 x I32 integers)
+DAta.align(4)
+DAta[:dummy_malloc_data] = [0, 0, 0, 0]
 
 class Header
   attr_accessor :ptr, :size
@@ -47,6 +48,7 @@ class Malloc
   # declare ahead of time because is used in
   # the code before it is actually defined
   result :Malloc, :free, :nil
+  result :Malloc, :morecore, :Header
 
 # -------- Dynamic Memory Allocator Functions -----------
 

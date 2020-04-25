@@ -12,17 +12,21 @@ require_relative './data'
 module Rlang::Parser
   class CVar
     include Log
-    attr_reader :name, :class_name
+    attr_reader :name, :klass
     attr_accessor :wtype
 
-    def initialize(class_name, name, value=0, wtype=WType::DEFAULT)
+    def initialize(klass, name, value=0, wtype=WType::DEFAULT)
+      @klass = klass
       @name = name
-      @class_name = class_name
       @wtype = wtype
       # Allocate and initialize the new cvar
-      raise "Error: Class variable #{self.wasm_name} already created!" if DAta.exist? self.wasm_name.to_sym
-      @data = DAta.new(self.wasm_name.to_sym, value, wtype)
-      logger.debug "creating #{self.class} #{class_name}::#{name} @ #{@address} with value #{value} / wtype #{wtype}"
+      raise "Error: #{self.class} #{self.wasm_name} already created!" if DAta.exist? self.wasm_name.to_sym
+      @data = DAta.new(self.wasm_name.to_sym, value, wtype) unless wtype.name == :Class
+      logger.debug "creating #{self.class} #{self.class_name}::#{name} @ #{@address} with value #{value} / wtype #{wtype}"
+    end
+
+    def class_name
+      @klass.name
     end
 
     def address

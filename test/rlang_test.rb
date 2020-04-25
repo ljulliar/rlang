@@ -100,6 +100,11 @@ class RlangTest < Minitest::Test
     assert_equal 1070503, @instance.exports.send(@wfunc, 6)
   end
 
+  def test_call_method_lookup
+    assert_equal 64142, @instance.exports.send(:test_c_test_call_method_lookup_with_modules)
+    assert_equal 76171, @instance.exports.send(:test_c_test_call_method_lookup_with_superclasses)
+  end
+
   def test_call_method_recursive
     assert_equal 28657, @instance.exports.send(@wfunc, 23)
   end
@@ -136,6 +141,14 @@ class RlangTest < Minitest::Test
     assert_equal 5, @instance.exports.send(@wfunc)
   end
 
+  def test_class_inheritance
+    assert_equal 36, @instance.exports.send(@wfunc)
+  end
+
+  def test_class_in_class
+    assert_equal 1111, @instance.exports.send(@wfunc)
+  end
+
   def test_class_var_set_in_class
     assert_equal 200, @instance.exports.send(@wfunc)
   end
@@ -151,28 +164,49 @@ class RlangTest < Minitest::Test
   def test_constant_in_class
     assert_equal 51, @instance.exports.send(@wfunc)
   end
-  
+
+  def test_constant_in_embedded_classes
+    assert_equal 122, @instance.exports.send(@wfunc)
+  end
+
+  def test_constant_in_inherited_classes
+    assert_equal 122, @instance.exports.send(@wfunc)
+  end
+   
   def test_constant_in_other_class
     assert_equal 1001, @instance.exports.send(@wfunc)
   end
 
   def test_data_init
+    base_address = address = 2048
     mem8 = @instance.memory.uint8_view 0
     mem32 = @instance.memory.uint32_view 0
 
-    stg = (0..15).collect {|nth| mem8[0+nth].chr}.join('')
+    stg = (0..15).collect {|nth| mem8[address+nth].chr}.join('')
     assert_equal "My\tLittle\tRlang\x00", stg
+    address += 16
 
-    int64 = (0..7).collect {|nth| mem8[16+nth].chr}.join('').unpack('Q<').first
+    int64 = (0..7).collect {|nth| mem8[address+nth].chr}.join('').unpack('Q<').first
     assert_equal 32_000_000_000, int64
+    int64_address = address
+    address += 8
 
-    assert_equal 32000, mem32[24/4]
-    assert_equal 0, mem32[28/4] # Address of the 1st string
-    assert_equal 16, mem32[32/4] # Address of the above i64
-    assert_equal 5, mem32[36/4]
-    assert_equal 257, mem32[40/4]
+    assert_equal 32000, mem32[address/4]
+    address += 4
 
-    stg = (0..8).collect {|nth| mem8[44+nth].chr}.join('')
+    assert_equal base_address, mem32[address/4] # Address of the 1st string
+    address += 4
+
+    assert_equal int64_address, mem32[address/4] # Address of the above i64
+    address += 4
+
+    assert_equal 5, mem32[address/4]
+    address += 4
+
+    assert_equal 257, mem32[address/4]
+    address += 4
+
+    stg = (0..8).collect {|nth| mem8[address+nth].chr}.join('')
     assert_equal "A string\n", stg
   end
 
@@ -300,6 +334,14 @@ class RlangTest < Minitest::Test
   def test_loop_while
     assert_equal 0, @instance.exports.send(@wfunc)
   end    
+
+  def test_module_include
+    assert_equal 1038, @instance.exports.send(@wfunc)
+  end
+
+  def test_module_extend
+    assert_equal 1038, @instance.exports.send(@wfunc)
+  end
 
   def test_multiple_expressions
     assert_equal 32, @instance.exports.send(@wfunc)

@@ -118,8 +118,9 @@ module Rlang::Parser
     # - keep_eval: whether to keep the value of the evaluated
     #   WAT expression on stock or not
     def parse_node(node, wnode, keep_eval=true)
+      raise "wnode type is incorrect (got #{wnode})" unless wnode.is_a?(WNode) || wnode.nil?
       logger.debug "\n---------------------->>\n" + 
-        "Parsing node: #{node}, wnode: #{wnode}, keep_eval: #{keep_eval}"
+        "Parsing node: #{node}, wnode: #{wnode.head}, keep_eval: #{keep_eval}"
 
       case node.type
       when :self
@@ -127,6 +128,9 @@ module Rlang::Parser
 
       when :class
         wn = parse_class(node, wnode)
+
+      when :module
+        wn = parse_module(node, wnode)
 
       when :defs
         wn = parse_defs(node, wnode, keep_eval)
@@ -219,8 +223,9 @@ module Rlang::Parser
       else
         raise "Unknown node type: #{node.type} => #{node}"
       end
+      raise "wnode type is incorrect (got #{wn}) at node #{node}" unless wn.is_a?(WNode) || wn.nil?
       logger.debug "\n----------------------<<\n" + 
-        "End parsing node: #{node}, parent wnode: #{wnode}, keep_eval: #{keep_eval}\n generated wnode #{wn}" +
+        "End parsing node: #{node}, parent wnode: #{wnode&.head}, keep_eval: #{keep_eval}\n generated wnode #{wn&.head}" +
         "\n----------------------<<\n"
       wn
     end
@@ -240,7 +245,7 @@ module Rlang::Parser
         end
         logger.debug "node idx: #{idx}/#{child_count-1}, wnode type: #{wnode.type}, keep_eval: #{keep_eval}, local_keep_eval: #{local_keep_eval}"
         wn = parse_node(n, wnode, local_keep_eval)
-        logger.debug "in begin: parsing node #{n} gives wnode #{wn}"
+        logger.debug "in begin: parsing node #{n} gives wnode #{wn&.head}"
       end
       return wn # return last wnode
     end
@@ -250,16 +255,24 @@ module Rlang::Parser
     #  ... body ...
     # end
     # -----
-    # [s(:const, nil, :Stack), nil, s(:begin ... body.... )]
+    # (class
+    #   (const nil :Stack) nil (begin ....)))
     #
+    # class Stack < Array
+    #  ... body ...
+    # end
+    # -----
+    # (class
+    #   (const nil :Stack) (const nil :Array) (begin ....)))
     def parse_class(node, wnode)
-      const_node = node.children.first
-      body_node = node.children.last
+      class_const_node, super_class_const_node, body_node = *node.children
       raise "expecting a constant for class name (got #{const_node})" \
-        unless const_node.type == :const
+        unless class_const_node.type == :const
 
       # create the class wnode
-      wn_class = @wgenerator.klass(wnode, const_node.children.last)
+      class_path = _build_const_path(class_const_node)
+      super_class_path = _build_const_path(super_class_const_node)
+      wn_class = @wgenerator.klass(wnode, class_path, super_class_path)
 
       # Parse the body of the class
       parse_node(body_node, wn_class) if body_node
@@ -273,6 +286,29 @@ module Rlang::Parser
       @wgenerator.def_new(wn_class)
       @wgenerator.def_attr(wn_class)
       wn_class
+    end
+
+    # Example:
+    # module Kernel
+    #  ... body ...
+    # end
+    # -----
+    # (module
+    #   (const nil :Kernel) nil (begin ....)))
+    #
+    def parse_module(node, wnode)
+      const_node = node.children.first
+      body_node = node.children.last
+      raise "expecting a constant for module name (got #{const_node})" \
+        unless const_node.type == :const
+      
+      module_path = _build_const_path(const_node)
+
+      # create the module wnode
+      wn_module = @wgenerator.module(wnode, module_path)
+      # Parse the body of the module
+      parse_node(body_node, wn_module) if body_node
+      wn_module
     end
 
     # TODO: the code for op_asgn is quite murky but I thought
@@ -325,7 +361,7 @@ module Rlang::Parser
     #
     def parse_op_asgn(node, wnode, keep_eval)
       op_asgn_type = node.children.first.type
-      logger.debug "op_asgn on #{op_asgn_type} / wnode: #{wnode}, keep_eval: #{keep_eval}"
+      logger.debug "op_asgn on #{op_asgn_type} / wnode: #{wnode.head}, keep_eval: #{keep_eval}"
 
       case op_asgn_type
       # Global variable case
@@ -341,7 +377,7 @@ module Rlang::Parser
         raise "Unknown global variable #{var_name}" unless gvar
 
         # Create the operator node (infer operator type from variable)
-        wn_op = @wgenerator.send_method(wn_var_set, op, gvar.wtype)
+        wn_op = @wgenerator.send_method(wn_var_set, gvar.wtype.class_path, op, :instance)
         # Create the var getter node as a child of operator node
         wn_var_get = @wgenerator.gvar(wn_op, gvar)
 
@@ -358,7 +394,7 @@ module Rlang::Parser
         raise "Unknown class variable #{var_name}" unless cvar
 
         # Create the operator node (infer operator type from variable)
-        wn_op = @wgenerator.send_method(wn_var_set, op, cvar.wtype)
+        wn_op = @wgenerator.send_method(wn_var_set, cvar.wtype.class_path, op, :instance)
         # Create the var getter node as a child of operator node
         wn_var_get = @wgenerator.cvar(wn_op, cvar)
       
@@ -375,7 +411,7 @@ module Rlang::Parser
         raise "Unknown local variable #{var_name}" unless lvar
 
         # Create the operator node (infer operator type from variable)
-        wn_op = @wgenerator.send_method(wn_var_set, op, lvar.wtype)
+        wn_op = @wgenerator.send_method(wn_var_set, lvar.wtype.class_path, op, :instance)
         # Create the var getter node as a child of operator node
         wn_var_get = @wgenerator.lvar(wn_op, lvar)
 
@@ -401,7 +437,7 @@ module Rlang::Parser
         # Second argument of the setter is the operator wnode
         # Create it with wtype of receiver by default. We may
         # change that wtype with the operands call later on
-        wn_op = @wgenerator.send_method(wn_var_set, operator, ivar.wtype)
+        wn_op = @wgenerator.send_method(wn_var_set, ivar.wtype.class_path, operator, :instance)
 
         # now create the getter node as a child of the
         # operator
@@ -431,7 +467,7 @@ module Rlang::Parser
         wn_recv = parse_node(recv_node, wnode, true)
 
         # Create the top level setter call
-        wn_var_set = @wgenerator.call(wnode, wn_recv.wtype.name, "#{method_name}=", :instance)
+        wn_var_set = @wgenerator.send_method(wnode, wn_recv.wtype.class_path, :"#{method_name}=", :instance)
 
         # First argument of the setter must be the recv_node
         wn_recv.reparent_to(wn_var_set)
@@ -439,7 +475,7 @@ module Rlang::Parser
         # Second argument of the setter is the operator wnode
         # Create it with wtype of receiver by default. We may
         # change that wtype with the operands call later on
-        wn_op = @wgenerator.send_method(wn_var_set, op, wn_recv.wtype)
+        wn_op = @wgenerator.send_method(wn_var_set, wn_recv.wtype.class_path, op, :instance)
 
         # Parsing the send node will create the getter wnode
         # this is the first argument of the operator wnode,
@@ -452,7 +488,7 @@ module Rlang::Parser
         # must be ignored then drop it
         unless (keep_eval || wn_var_set.wtype.blank?)
           @wgenerator.drop(wnode)
-          #@wgenerator.call(wnode, wn_recv.wtype.name, "#{method_name}", :instance)
+          #@wgenerator.send_method(wnode, wn_recv.wtype.class_path, "#{method_name}", :instance)
         end
       else
         raise "op_asgn not supported for #{node.children.first}"
@@ -475,20 +511,27 @@ module Rlang::Parser
     # (casgn nil :MYCONST
     #   (int 2000))
     def parse_casgn(node, wnode, keep_eval)
-      class_name_node, constant_name, exp_node = *node.children
-#      raise "dynamic constant assignment" unless wnode.in_class_scope?
-      unless class_name_node.nil?
-        raise "constant assignment with class path not supported (got #{class_name_node})"
-      end
+      class_path_node, constant_name, exp_node = *node.children
+      const_path = _build_const_path(class_path_node) << constant_name
+
+      # raise "dynamic constant assignment" unless wnode.in_class_scope?
+      # unless class_path_node.nil?
+      #  raise "constant assignment with class path not supported (got #{class_name_node})"
+      # end
+      
+      # find the scope class
+      k = wnode.find_current_class_or_module()
 
       if wnode.in_method_scope?
         # if exp_node is nil then this is the form of 
         # :casgn that comes from op_asgn
+        const = wnode.find_const(const_path)
         if exp_node        
           if const.nil?
             # first constant occurence
             # type cast the constant to the wtype of the expression
-            const = wnode.create_const(constant_name, nil, 0, WType::DEFAULT)
+            const = wnode.create_const(const_path, nil, 0, WType::DEFAULT)
+            k.consts << const
             wn_casgn = @wgenerator.casgn(wnode, const)
             wn_exp = parse_node(exp_node, wn_casgn)
             const.wtype = wn_exp.wtype
@@ -501,7 +544,7 @@ module Rlang::Parser
             logger.warning "Already initialized constant #{const.name}"
           end
         else
-          raise "Constant #{const_name} not declared before" unless const
+          raise "Constant #{const_path} not declared before" unless const
           wn_casgn = @wgenerator.casgn(wnode, const)
         end
         # to mimic Ruby push the constant value on stack if needed
@@ -516,11 +559,18 @@ module Rlang::Parser
         # executing this code. Just statically initiliazing the 
         # const with the value
         wn_exp = parse_node(exp_node, wnode)
-        raise "Constant initializer initializer can only be an int or a constant/class (got #{wn_exp}" \
+        raise "Constant initializer can only be an int or a constant/class (got #{wn_exp}" \
           unless wn_exp.const?
-        const = wnode.create_const(constant_name, nil, wn_exp.wargs[:value], wn_exp.wtype)
+        if (const = wnode.find_const(const_path))
+          logger.warn "already initialized constant #{const.path}"
+          const.value = wn_exp.wargs[:value]
+        else
+          const = wnode.create_const(const_path, wn_exp.wargs[:value], wn_exp.wtype)
+          k.consts << const
+        end
         wnode.remove_child(wn_exp)
-        logger.debug "Constant #{constant_name} initialized with value #{const.value} and wtype #{const.wtype}"
+        logger.debug "Constant #{const_path} initialized with value #{const.value} and wtype #{const.wtype}"
+        return nil
       else
         raise "Constant can only be defined in method or class scope"
       end
@@ -591,6 +641,7 @@ module Rlang::Parser
         end
         # Do not export global for now
         #gvar.export! if self.config[:export_all]
+        return nil
       else
         raise "Global can only be defined in method or class scope"
       end
@@ -684,6 +735,8 @@ module Rlang::Parser
         cvar = wnode.create_cvar(cv_name, wn_exp.wargs[:value], wn_exp.wtype)
         wnode.remove_child(wn_exp)
         logger.debug "Class variable #{cv_name} initialized with value #{cvar.value} and wtype #{cvar.wtype}"
+        return
+        
       else
         raise "Class variable can only be defined in method or class scope"
       end
@@ -786,7 +839,7 @@ module Rlang::Parser
     # ---
     # ... s(:lvar, :nbytes)
     def parse_lvar(node, wnode, keep_eval)
-      logger.debug("node: #{node}, wnode: #{wnode}, keep_eval: #{keep_eval}")
+      logger.debug("node: #{node}, wnode: #{wnode.head}, keep_eval: #{keep_eval}")
 
       lv_name, = *node.children
       if (lvar = wnode.find_lvar(lv_name) || wnode.find_marg(lv_name))
@@ -794,7 +847,6 @@ module Rlang::Parser
       else
         raise "unknown local variable #{lv_name}"
       end
-      logger.debug "wnode: #{wnode}"
       # Drop last evaluated result if asked to 
       @wgenerator.drop(wnode) unless keep_eval
       return wn_lvar
@@ -802,7 +854,7 @@ module Rlang::Parser
 
     def parse_int(node, wnode, keep_eval)
       value, = *node.children
-      logger.debug "int: #{value} for parent wnode #{wnode} keep_eval:#{keep_eval}"
+      logger.debug "int: #{value} for parent wnode #{wnode.head} keep_eval:#{keep_eval}"
       wn_int = @wgenerator.int(wnode, WType::DEFAULT, value)
       # Drop last evaluated result if asked to
       @wgenerator.drop(wnode) unless keep_eval
@@ -857,26 +909,12 @@ module Rlang::Parser
     # -------
     # (const (const (const nil :TESTA) :C) :MYCONST))
     def parse_const(node, wnode, keep_eval)
-      # Build constant path from embeddec const sexp
-      const_path = []
-      n = node
-      while n
-        logger.debug "adding #{n.children.last} to constant path"
-        const_path.unshift(n.children.last)
-        n = n.children.first
-      end
+      # Build constant path from embedded const sexp
+      const_path = _build_const_path(node)
       full_const_name = const_path.join('::')
-      if const_path.size == 1
-        class_name = wnode.class_name
-        const_name = const_path.first
-      elsif const_path.size == 2
-        class_name, const_name = *const_path
-      else
-        raise "only constant of the form X or X::Y is supported (got #{full_const_name}"
-      end
 
       # See if constant exists. It should at this point
-      unless (const = wnode.find_const(const_name, class_name))
+      unless (const = wnode.find_const(const_path))
         raise "unknown constant #{full_const_name}"
       end
       wn_const = @wgenerator.const(wnode, const)
@@ -908,16 +946,24 @@ module Rlang::Parser
     #   ...
     # end
     def parse_defs(node, wnode, keep_eval)
-      logger.debug "node: #{node}\nwnode: #{wnode}"
-      recv_node, method_name, arg_nodes, body_node = *node.children
-      raise "only class method is supported. Wrong receiver at #{recv_node.loc.expression}" if recv_node.type != :self
+      logger.debug "node: #{node}\nwnode: #{wnode.head}"
+      if node.type == :def
+        # we are being called from parse_def to define
+        # a class method in addition to an instance method
+        method_name, arg_nodes, body_node = *node.children
+        recv_node = nil
+      else
+        recv_node, method_name, arg_nodes, body_node = *node.children
+        raise "only class method is supported. Wrong receiver at #{recv_node.loc.expression}" \
+          if recv_node.type != :self
+      end
+      logger.debug "Defining class method: #{method_name}"
       logger.debug "recv_node: #{recv_node}\nmethod_name: #{method_name}"
 
       # create corresponding func node
-      method = wnode.find_or_create_method(method_name, nil, nil, :class)
-      method.export! if (@@export || self.config[:export_all])
-      logger.debug "Method object : #{method}"
-      wn_method = @wgenerator.class_method(wnode, method)
+      wn_method = @wgenerator.def_method(wnode, method_name, :class)
+      wn_method.method.export! if (@@export || self.config[:export_all])
+
       # collect method arguments
       parse_args(arg_nodes, wn_method)
       # Look for any result directive and parse it so 
@@ -957,18 +1003,18 @@ module Rlang::Parser
     #   ...
     # end
     def parse_def(node, wnode, keep_eval)
-      logger.debug "node: #{node}\nwnode: #{wnode}"
+      logger.debug "node: #{node}\nwnode: #{wnode.head}"
       method_name, arg_nodes, body_node = *node.children
-      logger.debug "method_name: #{method_name}"
+      logger.debug "Defining instance method: #{method_name}"
 
       # create corresponding func node
-      method = wnode.find_or_create_method(method_name, nil, nil, :instance)
-      method.export! if (@@export || self.config[:export_all])
-      logger.debug "Method object : #{method}"
-      wn_method = @wgenerator.instance_method(wnode, method)
+      # Note: because module inclusion generate both instance
+      # and class methods we may get two methods wnode 
+      wn_method = @wgenerator.def_method(wnode, method_name, :instance)
+      wn_method.method.export! if (@@export || self.config[:export_all])
 
       # collect method arguments
-      parse_args(arg_nodes, wn_method)
+      wn_args = parse_args(arg_nodes, wn_method)
       # Look for any result directive and parse it so 
       # that we know what the return type is in advance
       # If :nil for instance then it may change the way
@@ -993,6 +1039,13 @@ module Rlang::Parser
       logger.debug "Full method wnode: #{wn_method}"
       # reset export toggle
       @@export = false
+
+      # if we are in a module then also define
+      # the class method because we don't know
+      # whether the module will be included or extended
+      if wnode.in_module_scope?
+        self.parse_defs(node, wnode, keep_eval)
+      end
       return wn_method
     end
 
@@ -1171,6 +1224,7 @@ module Rlang::Parser
       #    :cast_to, s(sym, :Class_name))
       # the signed argument true|false is optional and 
       # it defaults to false
+      # Class_name is a symbol like :A or :"A:B" or :"A:B:C"
       if method_name == :cast_to
         class_name_node = node.children.last
         raise "cast_to expects a symbol argument (got #{class_name_node}" unless class_name_node.type == :sym
@@ -1240,6 +1294,18 @@ module Rlang::Parser
         return parse_send_require_relative(node, wnode, keep_eval)
       end
 
+      if recv_node.nil? && method_name == :include
+        return parse_send_include(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? && method_name == :prepend
+        return parse_send_prepend(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? && method_name == :extend
+        return parse_send_extend(node, wnode, keep_eval)
+      end
+
       if recv_node.nil? && method_name == :export
         return parse_send_export(node, wnode, keep_eval)
       end
@@ -1299,6 +1365,57 @@ module Rlang::Parser
         unless file_node.type == :str
       parse_require_relative(wnode, file_node.children.last)
       return
+    end
+
+    # Directive to include a module
+    # current file
+    # Example
+    # include Kernel
+    # ----
+    # (send nil :include
+    #   (const nil :Kernel))
+    def parse_send_include(node, wnode, keep_eval)
+      const_node = node.children.last
+      module_path = _build_const_path(const_node)
+      raise "expecting a constant for include (got #{const_node})" \
+        unless const_node.type == :const
+      raise "include must be used in class scope" \
+        unless wnode.in_class_scope?
+      @wgenerator.include(wnode, module_path)
+    end
+
+    # Directive to prepend a module
+    # current file
+    # Example
+    # prepend MyModule
+    # ----
+    # (send nil :prepend
+    #   (const nil :MyModule))
+    def parse_send_prepend(node, wnode, keep_eval)
+      const_node = node.children.last
+      module_path = _build_const_path(const_node)
+      raise "expecting a constant for prepend (got #{const_node})" \
+        unless const_node.type == :const
+      raise "prepend must be used in class scope" \
+        unless wnode.in_class_scope?
+      @wgenerator.prepend(wnode, module_path)
+    end
+
+    # Directive to extend a module
+    # current file
+    # Example
+    # extend Kernel
+    # ----
+    # (send nil :extend
+    #   (const nil :Kernel))
+    def parse_send_extend(node, wnode, keep_eval)
+      const_node = node.children.last
+      module_path = _build_const_path(const_node)
+      raise "expecting a constant for extend (got #{const_node})" \
+        unless const_node.type == :const
+      raise "extend must be used in class scope" \
+        unless wnode.in_class_scope?
+      @wgenerator.extend(wnode, module_path)
     end
 
     # Directive to declare the current method
@@ -1383,15 +1500,17 @@ module Rlang::Parser
     # (:none means no value is returned)
     #
     # Example
-    # result :class_name, :method_name, :I64
+    # result :MyClass, :split, :I64
+    # result :"ClassA::MyClass", :split, :Header
     # ---------
     # s(:send, nil, :result,
-    #   s(:sym, :class_name),
+    #   s(:sym, :class_path),
     #   s(:sym, :method_name),
     #   s(:sym, :I64))
     #
     # if name starts with # it's a n instance method,
     # otherwise a class method
+    # Note: class path can be either A or A::B
     def parse_send_result(node, wnode, keep_eval)
       if wnode.in_method_scope?
         result_type, = *node.children[2]
@@ -1400,23 +1519,12 @@ module Rlang::Parser
         wnode.method_wnode.wtype = WType.new(result_type)
         logger.debug "result_type #{result_type} updated for method #{wnode.method_wnode.method}"
       elsif wnode.in_class_scope?
-        cn_name,  = *node.children[2]
-        mn_name,  = *node.children[3]
+        class_path_name,  = *node.children[2]
+        method_name, = *node.children[3]
         result_type, = *node.children[4]
         raise "result directive expects a symbol argument (got #{result_type}) in node #{node}" \
           unless result_type.is_a? Symbol
-        # Create class and method objects as we known we'll
-        # be calling them later on
-        WNode.root.find_or_create_class(cn_name)
-        if mn_name[0] == '#'
-          method_type = :instance
-          mth_name = mn_name[1..-1].to_sym
-        else
-          method_type = :class
-          mth_name = mn_name.to_sym
-        end
-        (mth = wnode.find_or_create_method(mth_name, cn_name, nil, method_type)).wtype = WType.new(result_type)
-        logger.debug "Declared #{method_type} method #{mth.name} in class #{mth.class_name} with wtype #{mth.wtype.name}"
+        @wgenerator.declare_method(wnode, WType.new(class_path_name), method_name.to_sym, result_type)
       else
         raise "result declaration not supported #{wn.scope} scope"
       end
@@ -1465,13 +1573,13 @@ module Rlang::Parser
     # in case it's not the default type 
     #
     # Example
-    # attr_type ptr: :I64, size: :I32
+    # attr_type ptr: :Header, size: :I32
     # ---------
     # s(:send, nil, :attr_type,
     #   (hash
     #     (pair
     #       s(:sym, :ptr)
-    #       s(:sym, :I64))
+    #       s(:sym, :Header))
     #     (pair
     #       s(:sym, :size)
     #       s(:sym, :I32))   ))
@@ -1482,12 +1590,12 @@ module Rlang::Parser
       hash_node = node.children.last
       attr_types = parse_type_args(hash_node, :attribute)
       attr_types.each do |name, wtype|
+        logger.debug "Setting attr #{name} type to #{wtype}"
         if (attr = wnode.find_attr(name))
-          logger.debug "Setting attr #{name} type to #{wtype}"
           # TODO find a way to update both wtype at once
           attr.wtype = WType.new(wtype)
         else
-          raise "Unknown class attribute #{name} in #{wnode}"
+          raise "Unknown class attribute #{name} in #{wnode.head}"
         end          
       end
       return
@@ -1567,40 +1675,31 @@ module Rlang::Parser
     end
 
     # Determine whether it's an instance or class method call
+    # TODO : see how to remove identical code between class
+    # and instance method calls below
     def parse_send_method_lookup(node, wnode, keep_eval)
       recv_node = node.children[0]
       #method_name = node.children[1]
-      if wnode.in_class_scope? || wnode.in_class_method_scope? || wnode.in_root_scope?
-        if recv_node.nil? || recv_node.type == :self 
-          return parse_send_class_method_call(node, wnode, keep_eval)
+      #if wnode.in_class_scope? || wnode.in_class_method_scope? || wnode.in_root_scope?
+        if recv_node.nil? || recv_node.type == :self
+          if wnode.in_instance_method_scope?
+            return parse_send_instance_method_call(node, wnode, keep_eval)
+          else
+            return parse_send_class_method_call(node, wnode, keep_eval)
+          end
         elsif recv_node.type == :const
-          const_name = recv_node.children.last
+          const_path = _build_const_path(recv_node)
           # if this is a Constant, not a class
           # then it's actually an instance method call
-          if wnode.find_const(const_name)
-            return parse_send_instance_method_call(node, wnode, keep_eval)
-          else
+          raise "Unknown constant #{const_path}" unless (c = wnode.find_const(const_path))
+          if (c.class? || c.module?)
             return parse_send_class_method_call(node, wnode, keep_eval)
-          end
+          else
+            return parse_send_instance_method_call(node, wnode, keep_eval)
+          end            
         else
           return parse_send_instance_method_call(node, wnode, keep_eval)
         end
-      elsif wnode.in_instance_method_scope?
-        if recv_node&.type == :const
-          recv_name = recv_node.children.last
-          # if this is a Constant, not a class
-          # then it's actually an instance method call
-          if wnode.find_const(recv_name)
-            return parse_send_instance_method_call(node, wnode, keep_eval)
-          else
-            return parse_send_class_method_call(node, wnode, keep_eval)
-          end
-        else
-          return parse_send_instance_method_call(node, wnode, keep_eval)
-        end
-      else
-        raise "Don't know how to call method in scope #{wnode.scope} from node #{recv_node}"
-      end
     end
 
     # Regular class Method call to self class
@@ -1638,26 +1737,27 @@ module Rlang::Parser
     #   (const nil :Header) :new) )
     #
     def parse_send_class_method_call(node, wnode, keep_eval)
-      logger.debug "Parsing class method call:..."
+      logger.debug "Parsing class method call..."
       recv_node = node.children[0]
       method_name = node.children[1]
       if recv_node.nil? || recv_node.type == :self
-        class_name = wnode.class_name
+        # differ class_name identification to
+        class_path = []
       elsif recv_node.type == :const
-        class_name = recv_node.children.last
+        class_path = _build_const_path(recv_node)
       else
         raise "Can only call method class on self or class objects (got #{recv_node} in node #{node})"
       end
-      logger.debug "...#{class_name}::#{method_name}"
+      logger.debug "...#{class_path}::#{method_name}"
       if method_name == :new && (wnode.in_class_scope? || wnode.in_root_scope?)
         # This is class object instantiation. Statically 
         # allocated though. So it can only happen in the
         # class scope for a class variable or a constant
         # Returns a wnode with a i32.const containing the address
-        wn_addr = @wgenerator.static_new(wnode, class_name)
+        wn_addr = @wgenerator.static_new(wnode, class_path)
         return wn_addr
       else
-        wn_call = @wgenerator.call(wnode, class_name, method_name, :class)
+        wn_call = @wgenerator.send_method(wnode, class_path, method_name, :class)
         arg_nodes = node.children[2..-1]
         arg_nodes.each { |node| parse_node(node, wn_call) }
         # Drop last evaluated result if asked to or if
@@ -1709,6 +1809,7 @@ module Rlang::Parser
     #  ) :!)
     #
     def parse_send_instance_method_call(node, wnode, keep_eval)
+      logger.debug "Parsing instance method call..."
       recv_node = node.children[0]
       method_name = node.children[1]
       # Parse receiver node and temporarily attach it
@@ -1724,11 +1825,8 @@ module Rlang::Parser
       wn_recv = recv_node.nil? ? parse_self(recv_node, wn_phony) : parse_node(recv_node, wn_phony)
       logger.debug "Parsed receiver : #{wn_recv} / wtype: #{wn_recv.wtype}"
 
-      # If it's a Wasm natively supported operator and it
-      # is not overloaded by the receiver's class
-      # then generate native operator Wasm code instead of
-      # a method call
-      wn_op = @wgenerator.send_method(wnode, method_name, wn_recv.wtype)
+      # Invoke method call
+      wn_op = @wgenerator.send_method(wnode, wn_recv.wtype.class_path, method_name, :instance)
 
       # reparent the receiver wnode(s) to operator wnode
       wn_phony.reparent_children_to(wn_op)
@@ -1787,7 +1885,7 @@ module Rlang::Parser
         # TODO: not sure this is the right thing to do. Double check
         logger.debug "self in class definition scope. Nothing to do."
       else
-        raise "Don't know what self means in this context: #{wnode}"
+        raise "Don't know what self means in this context: #{wnode.head}"
       end 
       wn
     end
@@ -2032,6 +2130,19 @@ module Rlang::Parser
       # Drop last evaluated result if asked to
       @wgenerator.drop(wnode) unless keep_eval
       return wn_op
+    end
+
+    def _build_const_path(node)
+      logger.debug "Building constant path..."
+      const_path = []; n = node
+      while n
+        raise "expecting a const node (got #{n})" unless n.type == :const
+        logger.debug "adding #{n.children.last} to constant path"
+        const_path.unshift(n.children.last)
+        n = n.children.first
+      end
+      logger.debug "... #{const_path}"
+      const_path
     end
 
     def dump

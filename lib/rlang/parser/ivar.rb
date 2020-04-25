@@ -11,11 +11,11 @@ require_relative './data'
 module Rlang::Parser
   class IVar
     include Log
-    attr_reader :name
+    attr_reader :name, :klass
     attr_accessor :wtype, :offset
 
-    def initialize(class_wnode, name, wtype=WType::DEFAULT)
-      @class_wnode = class_wnode
+    def initialize(klass, name, wtype=WType::DEFAULT)
+      @klass = klass
       @name = name
       @wtype = wtype
       # this is the offset of the instance variable
@@ -24,10 +24,6 @@ module Rlang::Parser
       # definition
       @offset = nil
       logger.debug "Instance variable #{name} created"
-    end
-
-    def class_name
-      @class_wnode.class_name
     end
 
     def size

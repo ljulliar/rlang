@@ -1,10 +1,17 @@
+# Rubinius WebAssembly VM
+# Copyright (c) 2019-2020, Laurent Julliard and contributors
+# All rights reserved.
+#
+# Base Object class
+
 require_relative './malloc'
+require_relative './kernel'
 
 class Object
-  # don't use allocate as a name to avoid
-  # colliding with Ruby native method in 
-  # Rlang simulator
-  def self.alloc(nbytes)
+
+  include Kernel
+  
+  def self.allocate(nbytes)
     result :I32
     Malloc.malloc(nbytes)
   end

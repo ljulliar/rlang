@@ -1,4 +1,5 @@
 require_relative './malloc'
+require_relative './memory'
 
 class String
   attr_reader :length, :ptr

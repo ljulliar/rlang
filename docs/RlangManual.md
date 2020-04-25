@@ -14,6 +14,7 @@ In Rlang you can define classes and those classes can be instantiated either sta
 
 Rlang provides:
 * Classes, class attributes and class variables
+* Modules
 * Object instantiation, attribute accessors and instance variables
 * Method definition and method calls
 * Integers and booleans 
@@ -46,8 +47,6 @@ calling that method later in your code is as simple as invoking `Math.fib(20)`
 ## Classes
 Classes are core constructs of Rlang and are very similar to Ruby classes.
 
-In Rlang, all methods must be defined within the scope of a class. In other words you can not define a method at the top level of your Rlang code (not a very good practice anyway, even in plain Ruby). Also there is no inheritance mechanism in Rlang in the current version.
-
 Here is an example of a class definition and the initialization and use of a class variable written in Rlang (note: this example uses only class methods on purpose. Instance methods are covered later in this document):
 
 ```ruby
@@ -69,6 +68,22 @@ This short piece of code shows several interesting points:
 1. A class variable can be statically initialized at the class level. Concretely this means that at compile time the memory location corresponding to the `@@cvar` class variable is statically initialized at 100.
 1. Methods in this example are class methods, hence the use of `self.take_one` and `self.refill` in method definitions but instance methods are also supported (more on this later)
 1. In `MyClass::take_one` you can see that Rlang also supports convenient syntactic sugar like `if` as a modifier or combined operation and assignment as in Ruby (here the `-=` operator)
+
+### Class scope and inheritance
+Rlang supports the definition of classes in class at any depth and class naming follows the exact same convention as in Ruby. In the example below the `B` class can be referred to as `A::B`. 
+
+```ruby
+class A
+  class B
+  end
+end
+
+def main
+  new_object = A::B.new
+end
+```
+A Class in RLang can also inherit from another class as in Ruby. Whan a superclass is not specified, a newly defined class automatically inherits from the Object class.
+
 
 ### Class attributes and instance variables
 Rlang support both the use of class attributes and instance variables. Class attribute declaration is happening through the `attr_accessor`, `attr_reader` or `attr_writer` directives as in plain Ruby. It actually defines a couple of things for you:
@@ -113,6 +128,8 @@ class Square
   end
 end
 ```
+## Modules
+Modules in Rlang behaves exactly like modules in Ruby. Modules can be included, extended or prepended in other classes and modules. .
 
 ## Object instantiation
 Starting with version 0.4.0, Rlang is equipped with a dynamic memory allocator (see [Rlang library](#the-rlang-library) section). It is therefore capable of allocating objects in a dynamic way at *runtime*. Prior versions were only capable of allocating objects statically at *compile* time.
@@ -131,7 +148,7 @@ class Test
 end
 ```
 
-**IMPORTANT NOTE**: in the current version of Rlang the new method call used to allocate the object sape doesn't do any initialization. That's why the new method in this context (class body or top level) doesn't accept any parameter
+**IMPORTANT NOTE**: in the current version of Rlang the new method call used to allocate static objects doesn't do any initialization. That's why the new method in this context (class body or top level) doesn't accept any parameter.
 
 ### Dynamic objects
 At any point in the body of method you can dynamically instantiate a new object. Here is an exemple:
@@ -170,6 +187,11 @@ end
 
 ## Methods
 Methods in Rlang are defined as you would normally do in Ruby by using the `def` reserved keyword. They can be either class or instance methods.
+
+### Method definition
+A method in Rlang can either be defined in a class, a module or at the top level. In that case the method is implicitely defined within the context of the Object class as Ruby does.
+
+Class methods must be defined using the `def self.mymethod` syntax. The `class << self ... end` form is not supported.
 
 ### Method arguments
 Rlang method definition supports fixed name arguments in any number. The  *args and **args notation are not supported.
@@ -251,7 +273,7 @@ The types currently supported by Rlang are integers either long (`:I32`) or doub
 Only in rare cases will you use the `local` directive in methods as Rlang does its best to infer the type of a variable from its first assigned value. As an example, in the code below, the fact that `arg1` is known to be an `:I64` type of argument is enough to auto-magically create lvar as in `:I64` local variable too.
 
 ```ruby
-def self.m_local_var(arg1)
+def m_local_var(arg1)
   arg :arg1, :I64
   lvar = arg1 * 100
   # ....

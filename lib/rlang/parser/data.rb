@@ -23,13 +23,14 @@ module Rlang::Parser
     def initialize(label, value, wtype=WType::DEFAULT)
       raise "Data label '#{label}' already initialized" \
         if self.class.exist? label
+      logger.debug "@@current_address: #{@@current_address}"
       @label = label
       @wtype = wtype
       @address = @@current_address
       @@label_table[@label] = self
       @value = []
       self.append_value(value, wtype)
-      logger.debug "New Data[#{@label}] initialized with #{@value} at address #{@address}"
+      logger.debug "New Data[#{@label}] initialized with #{@value} at address #{@address} / new current address: #{@@current_address}"
     end
 
     def self.reset!
@@ -39,7 +40,7 @@ module Rlang::Parser
 
     def append_value(value, wtype)
       @value << value
-      if value.is_a?(String) 
+      if value.is_a? String
         @@current_address += value.length
       else
         logger.warn "Data type #{@wtype} misaligned!!! (Data[:#{@label}] value #{value} at address #{@address}" \
@@ -71,6 +72,8 @@ module Rlang::Parser
     end
 
     def self.address=(address)
+      logger.fatal "ERROR!! Cannot decrease current DAta address (was #{@@current_address}, got #{address}) " \
+        if address < @@current_address
       @@current_address = address
     end
 
