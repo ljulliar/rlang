@@ -1,9 +1,8 @@
 ## 0.5.0
-* Class attributes syntac now identical to plain Ruby
-* Very preliminary version of Rlang String class
+* Class attributes syntax now identical to plain Ruby
 * Class in class definition and module supported
 * Class inheritance
-* Basic array class
+* Basic Array and String class in Rlang library
 
 ## 0.4.0
 * Object instances, instance methods and instance variables now supported
