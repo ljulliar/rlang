@@ -6,10 +6,8 @@ Rlang is actually two things: 1) a subset of the Ruby language and 2) a **compil
 
 So in summary what Rlang does is:
 <p align="center"><b>
-Ruby source code &rarr; Rlang compiler &rarr; WebAssembly bytecode
+Rlang source code &rarr; Rlang compiler &rarr; WebAssembly bytecode
 </b></p>
-
-Rlang must not be confused with other projects claiming to "compile" Ruby to WebAssembly. What they really do is to actually compile a mruby VM written in C in Webassembly (using tools like emscripten) and then run that VM in a Webassembly runtime.
 
 Rlang can be seen as a foundational language that can help you quickly develop and debug high performance WebAssembly modules. For the rationale behind the creation of Rlang see [below](#why-rlang).
 
