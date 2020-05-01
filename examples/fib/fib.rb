@@ -9,3 +9,7 @@ class Math
     return f
   end
 end
+
+def self.main
+  Math.fib(12)
+end

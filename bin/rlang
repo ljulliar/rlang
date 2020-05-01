@@ -67,6 +67,10 @@ options:
     options[:wasm] = v
   end
 
+  opts.on("-S", "--start FUNCTION", "Function name where execution starts (default '_start')") do |function|
+    options[:start] = function
+  end
+
   opts.on("-o", "--output FILE", "Write output to file") do |file|
     options[:output] = file
   end
@@ -87,9 +91,10 @@ options:
   end
 end.parse!(ARGV)
 
-options[:module] ||= ''
+options[:module]     ||= '' 
 options[:memory_min] ||= 4
-options[:LOAD_PATH] ||= []
+options[:LOAD_PATH]  ||= []
+options[:start]      ||= '_start'
 
 fh_out = options[:output] ? File.open(options[:output], 'w') : STDOUT
 

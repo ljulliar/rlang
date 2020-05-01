@@ -659,6 +659,10 @@ module Rlang::Parser
       !self.module_wnode.nil? && !self.in_method_scope?
     end
 
+    def in_class_or_module_scope?
+      self.in_class_scope? || self.in_module_scope?
+    end
+
     def in_root_scope?
       self.root? || (self.parent.root? && !self.in_class_scope?)
     end

@@ -45,7 +45,7 @@ module Rlang::Parser
     NIL = 999999999
 
     # export toggle for method declaration
-    @@export = false
+    @@export, @@export_name = false, nil
 
 
     attr_accessor :wgenerator, :source, :config
@@ -962,7 +962,7 @@ module Rlang::Parser
 
       # create corresponding func node
       wn_method = @wgenerator.def_method(wnode, method_name, :class)
-      wn_method.method.export! if (@@export || self.config[:export_all])
+      wn_method.method.export!(@@export_name) if (@@export || self.config[:export_all])
 
       # collect method arguments
       parse_args(arg_nodes, wn_method)
@@ -988,8 +988,10 @@ module Rlang::Parser
       @wgenerator.result(wn_method)
       @wgenerator.params(wn_method)
       logger.debug "Full method wnode: #{wn_method}"
+
       # reset export toggle
-      @@export = false
+      @@export, @@export_name = false, nil
+
       return wn_method
     end
 
@@ -1011,7 +1013,7 @@ module Rlang::Parser
       # Note: because module inclusion generate both instance
       # and class methods we may get two methods wnode 
       wn_method = @wgenerator.def_method(wnode, method_name, :instance)
-      wn_method.method.export! if (@@export || self.config[:export_all])
+      wn_method.method.export!(@@export_name) if (@@export || self.config[:export_all])
 
       # collect method arguments
       wn_args = parse_args(arg_nodes, wn_method)
@@ -1038,7 +1040,7 @@ module Rlang::Parser
       @wgenerator.params(wn_method)
       logger.debug "Full method wnode: #{wn_method}"
       # reset export toggle
-      @@export = false
+      @@export, @export_name = false, nil
 
       # if we are in a module then also define
       # the class method because we don't know
@@ -1420,9 +1422,19 @@ module Rlang::Parser
 
     # Directive to declare the current method
     # in the WASM exports
+    # Example
+    #
+    # export
+    # export :function_name
+    #
+    # With out an explicit function name, the export name
+    # will be automatically built from the class/method names
     def parse_send_export(node, wnode, keep_eval)
-      raise "export must be used in class scope" unless wnode.in_class_scope?
+      raise "export must be used in class scope" unless wnode.in_class_or_module_scope?
       @@export = true
+      if (function_node = node.children[2])
+        @@export_name = function_node.children.last
+      end
       return
     end
 

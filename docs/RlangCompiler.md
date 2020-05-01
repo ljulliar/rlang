@@ -19,6 +19,7 @@ Usage: rlang [options] rlang_file.rb
     -w, --wat                        Generate WAT source file
     -a, --ast                        Generate Ruby AST file
     -s, --wasm                       Generate WASM bytecode file
+    -S, --start FUNCTION             Function name where execution starts (default '_start')
     -o, --output FILE                Write output to file
     -v, --verbose [LEVEL]            Verbosity level (fatal, error, warn, info, debug)
     -V, --version                    Displays Rlang version
@@ -30,7 +31,8 @@ Usage: rlang [options] rlang_file.rb
 * **-m, --memory MIN[,MAX]**: size of the WASM memory allocated at run time. The first argument is the initial amount of memory allocated and the second one (optional) is the maximum memory that your WASM module can allocate while running. The unit of both arguments is in number of WASM pages (4 KBytes)
 * **-w, --wat**: parse Rlang file and generate WAT source code
 * **-a, --ast**: parse Rlang file and generate the Ruby abstract syntax tree
-* **-w, --wat**: parse Rlang file, generate WAT source code and compile it to WASM bytecode
+* **-s, --wasm**: parse Rlang file, generate WAT source code and compile it to WASM bytecode
+* **-S, --start**: function to use as the execution starting point of the WASM module (default is `_start`)
 * **-o, --output FILE**: send rlang output to FILE
 * **-v, --verbose [LEVEL]**: verbosity level (fatal, error, warn, info, debug). Default is warn
 * **-V, --version**: Displays Rlang version

@@ -210,6 +210,11 @@ class RlangTest < Minitest::Test
     assert_equal "A string\n", stg
   end
 
+  def test_def_export
+    assert_equal 10, @instance.exports.send(:my_function_name)
+    assert_equal 100, @instance.exports.send(@wfunc)
+  end
+
   def test_def_no_arg_return_3
     assert_equal 3, @instance.exports.send(@wfunc)
   end

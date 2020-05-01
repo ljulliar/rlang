@@ -246,7 +246,9 @@ end
 The `local` directive above instructs the compiler that `lvar` is of type `:I64` and the local variable mysquare is of type `Square`. Without it `lvar` would have been auto-vivified with the Wasm default type or `:I32`.
 
 ### Exporting a method
-In WebAssembly, you can make functions visible to the outside world by declaring them in the export section. To achieve a similar result in Rlang, you can use the `export` keyword right before a method definition. 
+In WebAssembly, you can make functions visible to the outside world by declaring them in the export section. To achieve a similar result in Rlang, you can use the `export` keyword right before a method definition with an optional export name of your choice.
+
+If no function name is specified, Rlang will build it for you. WASM exported functions are named after the class name (in lower case), the method type (class or instance) and the method name. As an example the exported method in the example above will be known to the WASM runtime as the `myclass_c_visible` function (where the `_c_` means it's a class function and `_i_` an instance method).
 
 ```ruby
 class MyClass
@@ -256,18 +258,21 @@ class MyClass
     # ...
   end
 
+  export :seeable
+  def self.visible_too(arg1)
+    # ...
+  end
+
   def self.not_visible
     # ...
   end
 end
 ```
 
-Note that the `export` keyword only applies to the method definition that immediately follows. In the example above `MyClass::m_visible` will be exported by the generated WASM module whereas `MyClass::m_not_visible` will not
-
-WASM exported functions are named after the class name (in lower case) followed by an underscore and the method name. So the exported method in the example above is known to the WASM runtime as the `myclass_c_visible` function (where the `_c_` means it's a class function and `_i_` an instance method)
+Note that the `export` keyword only applies to the method definition that immediately follows. In the example above `MyClass::visible` and `MyClass::visible_too` will be exported by the generated WASM module whereas `MyClass::not_visible` will not.
 
 ## Rlang types
-The types currently supported by Rlang are integers either long (`:I32`) or double (`:I64`) or a class type. Float types (:F32, :F64) may follow in a future version. By default Rlang assumes that any integer literal, variable, argument,... is of type `:I32`. If you need it to be of a different type you must state it explicitely in the method body (see above).
+The types currently supported by Rlang are integers either long (`:I32`) or double (`:I64`) or a class type. Float types (`:F32`, `:F64`) may follow in a future version. By default Rlang assumes that any integer literal, variable, argument,... is of type `:I32`. If you need it to be of a different type you must state it explicitely in the method body (see above).
 
 ### Implicit type cast
 Only in rare cases will you use the `local` directive in methods as Rlang does its best to infer the type of a variable from its first assigned value. As an example, in the code below, the fact that `arg1` is known to be an `:I64` type of argument is enough to auto-magically create lvar as in `:I64` local variable too.

@@ -318,6 +318,13 @@ module Rlang::Parser
       else
         method = wnode.create_method(nil, method_name, method_type, nil, true)
       end
+
+      # If it's the main method, give it the proper name in export if
+      # specified on command line
+      if method.klass.path_name == :Object && method.name == :main
+        method.export_name = @parser.config[:start]
+      end
+
       # Generate method definition wnode
       logger.debug("Generating wnode for #{method_type} method #{method_name}")
       wn = WNode.new(:method, wnode)

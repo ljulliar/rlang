@@ -14,13 +14,15 @@ module Rlang::Parser
     include Log
 
     attr_reader :name, :wtype, :method_type, :wnode
-    attr_accessor :klass, :margs, :lvars
+    attr_writer :export_name
+    attr_accessor :klass, :margs, :lvars, :export_as
 
     METHOD_TYPES = [:instance, :class]
 
     def initialize(name, klass, wtype, method_type)
       raise "Wrong method wtype argument: #{wtype.inspect}" unless wtype.is_a? WType
       @name = name
+      @export_name = nil
       @klass = klass
       @wtype = wtype || WType::DEFAULT
       @method_type = method_type
@@ -79,6 +81,7 @@ module Rlang::Parser
     end
 
     def export_name
+      return @export_name if @export_name
       # [] method name is illegal in Wasm function name
       name = @name.to_s.sub(/\[\]/, 'brackets').to_sym
       if self.instance?
@@ -88,7 +91,8 @@ module Rlang::Parser
       end
     end
 
-    def export!
+    def export!(export_name=nil)
+      @export_name = export_name
       Export.new(self)
     end
 
