@@ -1285,6 +1285,12 @@ module Rlang::Parser
       # addr method applied to statically allocated variables
       # only constant and class variables returns their address 
       # in memory
+      #
+      # Example
+      # @@argv_bu_size.addr
+      # ---
+      # (send (cvar :@@argv_buf_size) :addr)
+      #
       if method_name == :addr
         if recv_node.type == :const
           # Build constant path from embedded const sexp
@@ -1304,7 +1310,7 @@ module Rlang::Parser
         elsif recv_node.type == :cvar
           raise "Class variable can only be accessed in method scope" \
             unless wnode.in_method_scope?
-          cv_name, = *node.children
+          cv_name = recv_node.children.first
           if (cvar = wnode.find_cvar(cv_name))
             wn_cvar_addr = @wgenerator.cvar_addr(wnode, cvar)
           else

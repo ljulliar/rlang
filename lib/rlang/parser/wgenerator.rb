@@ -490,7 +490,7 @@ module Rlang::Parser
     # Get class variable address
     def cvar_addr(wnode, cvar)
       (wn = WNode.new(:insn, wnode)).wtype = cvar.wtype
-      wn.c(:const, addr: cvar.address)
+      wn.c(:addr, value: cvar.address)
       wn
     end
 
