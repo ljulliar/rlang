@@ -29,23 +29,19 @@ module Rlang::Parser
 
     include Log
 
-    ARITHMETIC_OPS = [:+, :-, :*, :/, :%, :&, :|, :^, :>>, :<<]
-    RELATIONAL_OPS = [:==, :!=, :>, :<, :>=, :<=, :'>s', :'<s', :'>=s', :'>=s']
-    UNARY_OPS = [:'!']
-
-    # Type cast order in decreading order of precedence
-    TYPE_CAST_PRECEDENCE = [Type::F64, Type::F32, Type::I64, Type::I32]
-
     # WARNING!! THIS IS A **VERY** NASTY HACK PRETENDING
     # THAT THIS int VALUE means NIL. It's totally unsafe 
     # of course as an expression could end up evaluating
     # to this value and not be nil at all. But I'm using
     # it for now in the xxxx_with_result_type variants of
     # some parsing methods (if, while,...)
+    # NOTE: those variants with result type are **NOT** the
+    # ones used by Rlang right now
     NIL = 999999999
 
-    # export toggle for method declaration
+    # export and import toggle for method declaration
     @@export, @@export_name = false, nil
+    @@import, @@import_module_name, @@import_function_name = false, nil, nil
 
 
     attr_accessor :wgenerator, :source, :config
@@ -121,6 +117,8 @@ module Rlang::Parser
       raise "wnode type is incorrect (got #{wnode})" unless wnode.is_a?(WNode) || wnode.nil?
       logger.debug "\n---------------------->>\n" + 
         "Parsing node: #{node}, wnode: #{wnode.head}, keep_eval: #{keep_eval}"
+      # Nothing to parse
+      return if node.nil?  
 
       case node.type
       when :self
@@ -962,7 +960,9 @@ module Rlang::Parser
 
       # create corresponding func node
       wn_method = @wgenerator.def_method(wnode, method_name, :class)
-      wn_method.method.export!(@@export_name) if (@@export || self.config[:export_all])
+      if @@import
+        wn_import = @wgenerator.import_method(wn_method, @@import_module_name, @@import_function_name)
+      end
 
       # collect method arguments
       parse_args(arg_nodes, wn_method)
@@ -970,7 +970,7 @@ module Rlang::Parser
       # that we know what the return type is in advance
       # If :nil for instance then it may change the way
       # we generate code in the body of the method
-      if (result_node = body_node.children.find {|n| n.respond_to?(:type) && n.type == :send && n.children[1] == :result})
+      if body_node && (result_node = body_node.children.find {|n| n.respond_to?(:type) && n.type == :send && n.children[1] == :result})
         logger.debug "result directive found: #{result_node}"
         parse_node(result_node, wn_method, keep_eval)
       end
@@ -979,6 +979,8 @@ module Rlang::Parser
       # computed value unless a result :nil directive
       # is specified
       logger.debug "method_name: #{method_name}, wtype: #{wn_method.wtype}"
+      raise "Body for imported method #{method_name} should be empty (got #{body_node})" \
+        if (@@import && body_node)
       parse_node(body_node, wn_method, !wn_method.wtype.blank?)
 
       # Now that we have parsed the whole method we can 
@@ -987,10 +989,11 @@ module Rlang::Parser
       @wgenerator.locals(wn_method)
       @wgenerator.result(wn_method)
       @wgenerator.params(wn_method)
+      @wgenerator.export_method(wn_method, @@export_name) if (@@export || self.config[:export_all])
       logger.debug "Full method wnode: #{wn_method}"
 
-      # reset export toggle
-      @@export, @@export_name = false, nil
+      # reset method toggles
+      self.class._reset_toggles
 
       return wn_method
     end
@@ -1010,18 +1013,19 @@ module Rlang::Parser
       logger.debug "Defining instance method: #{method_name}"
 
       # create corresponding func node
-      # Note: because module inclusion generate both instance
-      # and class methods we may get two methods wnode 
       wn_method = @wgenerator.def_method(wnode, method_name, :instance)
-      wn_method.method.export!(@@export_name) if (@@export || self.config[:export_all])
+      if @@import
+        wn_import = @wgenerator.import_method(wn_method, @@import_module_name, @@import_function_name)
+      end
 
       # collect method arguments
       wn_args = parse_args(arg_nodes, wn_method)
+
       # Look for any result directive and parse it so 
       # that we know what the return type is in advance
       # If :nil for instance then it may change the way
       # we generate code in the body of the method
-      if (result_node = body_node.children.find {|n| n.respond_to?(:type) && n.type == :send && n.children[1] == :result})
+      if body_node && (result_node = body_node.children.find {|n| n.respond_to?(:type) && n.type == :send && n.children[1] == :result})
         logger.debug "result directive found: #{result_node}"
         parse_node(result_node, wn_method, keep_eval)
       end
@@ -1038,9 +1042,11 @@ module Rlang::Parser
       @wgenerator.locals(wn_method)
       @wgenerator.result(wn_method)
       @wgenerator.params(wn_method)
+      @wgenerator.export_method(wn_method, @@export_name) if (@@export || self.config[:export_all])
       logger.debug "Full method wnode: #{wn_method}"
-      # reset export toggle
-      @@export, @export_name = false, nil
+
+      # reset method toggles
+      self.class._reset_toggles
 
       # if we are in a module then also define
       # the class method because we don't know
@@ -1276,6 +1282,43 @@ module Rlang::Parser
         return wn_cast
       end
 
+      # addr method applied to statically allocated variables
+      # only constant and class variables returns their address 
+      # in memory
+      if method_name == :addr
+        if recv_node.type == :const
+          # Build constant path from embedded const sexp
+          const_path = _build_const_path(recv_node)
+          full_const_name = const_path.join('::')
+
+          # See if constant exists. It should at this point
+          unless (const = wnode.find_const(const_path))
+            raise "unknown constant #{full_const_name}"
+          end
+          wn_const_addr = @wgenerator.const_addr(wnode, const)
+
+          # Drop last evaluated result if asked to
+          @wgenerator.drop(wnode) unless keep_eval
+          return wn_const_addr
+
+        elsif recv_node.type == :cvar
+          raise "Class variable can only be accessed in method scope" \
+            unless wnode.in_method_scope?
+          cv_name, = *node.children
+          if (cvar = wnode.find_cvar(cv_name))
+            wn_cvar_addr = @wgenerator.cvar_addr(wnode, cvar)
+          else
+            raise "unknown class variable #{cv_name}"
+          end
+          # Drop last evaluated result if asked to
+          @wgenerator.drop(wnode) unless keep_eval
+          return wn_cvar_addr
+
+        else
+          # Do nothing. This will be treated as a regular method call
+        end
+      end
+
       # A that stage it's a method call of some sort
       # (call on class or instance)
       return parse_send_method_lookup(node, wnode, keep_eval)
@@ -1310,6 +1353,10 @@ module Rlang::Parser
 
       if recv_node.nil? && method_name == :export
         return parse_send_export(node, wnode, keep_eval)
+      end
+
+      if recv_node.nil? && method_name == :import
+        return parse_send_import(node, wnode, keep_eval)
       end
 
       if recv_node.nil? && method_name == :local
@@ -1425,16 +1472,54 @@ module Rlang::Parser
     # Example
     #
     # export
+    # ---
+    # (send nil :export)
+    # OR
     # export :function_name
+    # ---
+    # (send nil :export
+    #   (sym :function_name))
     #
     # With out an explicit function name, the export name
     # will be automatically built from the class/method names
     def parse_send_export(node, wnode, keep_eval)
+      logger.debug "Export directive found for..."
       raise "export must be used in class scope" unless wnode.in_class_or_module_scope?
       @@export = true
       if (function_node = node.children[2])
+        raise "export function name must be a symbol (got #{function_node})" \
+          unless function_node.type == :sym  
         @@export_name = function_node.children.last
       end
+      logger.debug "... #{@@export_name}"
+      return
+    end
+
+    # Directive to declare the current method
+    # in the WASM imports
+    # Example
+    #
+    # import :module_name, :function_name
+    # ---
+    # (send nil :import
+    #   (sym :mod)
+    #   (sym :func))
+    #
+    def parse_send_import(node, wnode, keep_eval)
+      logger.debug "Import directive found for..."
+      raise "export must be used in class scope" unless wnode.in_class_or_module_scope?
+      raise "import expects 2 arguments (got #{node.children.count - 2})" \
+        unless node.children.count == 4
+      
+      module_node, function_node = node.children[2..-1]
+      raise "import module name must be a symbol (got #{module_node})" \
+        unless module_node.type == :sym    
+      raise "import function name must be a symbol (got #{function_node})" \
+        unless function_node.type == :sym
+      @@import = true
+      @@import_module_name   = module_node.children.last
+      @@import_function_name = function_node.children.last
+      logger.debug "... #{@@import_module_name}, #{@@import_function_name}"
       return
     end
 
@@ -2155,6 +2240,11 @@ module Rlang::Parser
       end
       logger.debug "... #{const_path}"
       const_path
+    end
+
+    def self._reset_toggles
+      @@export, @@export_name = false, nil
+      @@import, @@import_module_name, @@import_function_name = false, nil, nil
     end
 
     def dump

@@ -21,6 +21,7 @@ module Rlang::Parser
     # WASM code templates
     T = {
       func: 'func %{func_name}',
+      import: 'import "%{module_name}" "%{function_name}"',
       param: 'param %{name} %{wasm_type}',
       result: 'result %{wasm_type}',
       return: 'return',
@@ -57,12 +58,13 @@ module Rlang::Parser
   (local.get %{attr_name})
   (%{wtype}.store offset=%{offset} (local.get $_self_) (local.get %{attr_name}))},
       class_size: %q{func %{func_name} (result %{wtype})
-  (%{wtype}.const %{size})}
+  (%{wtype}.const %{size})},
+      comment: ';; %{comment}'
     }
 
     attr_accessor :type, :wargs, :children, :parent, :comment, 
                   :method, :template, :keep_on_stack, :classes,
-                  :modules
+                  :modules, :link
     attr_reader :wtype, :label, :klass, :module
 
     @@label_index = 0
@@ -98,6 +100,10 @@ module Rlang::Parser
       # For insn wnode with 
       # label (.e.g block, loop)
       @label = nil
+
+      # link to a related node
+      # Semantic of the link depend on the wnode type
+      @link = nil
     end
 
     def self.root
@@ -204,8 +210,8 @@ module Rlang::Parser
 
     # insert a blank wnode above self, so between self wnode 
     # and its parent (self -> parent becomes self -> wn -> parent)
-    def insert(wtype=:none)
-      wn = WNode.new(wtype, self.parent)
+    def insert(type=:none)
+      wn = WNode.new(type, self.parent)
       self.reparent_to(wn)
       wn
     end
@@ -215,6 +221,13 @@ module Rlang::Parser
     def delete!
       return if self.root? || self.parent.nil?
       self.parent.remove_child(self)
+    end
+
+    # Silence the current wnode (which means
+    # inserting a silent type wnode between this
+    # and its parent)
+    def silence!
+      self.insert(:silent)
     end
 
     def klass=(klass)
@@ -519,7 +532,7 @@ module Rlang::Parser
       if (mn = self.method_wnode)
         mn.method.margs << (marg = MArg.new(name))
       else
-        raise "No class found for class variable #{marg}"
+        raise "No class found for method argument #{marg}"
       end
       marg
     end
@@ -693,16 +706,39 @@ module Rlang::Parser
 
     # Generate WAT code starting for this node and tree branches below
     def transpile(indent=0)
+      # follow children first and then go on with
+      # the wnode link if it exits
+      children = self.children + (self.link ? [self.link] : [])
+
+      logger.debug "children: #{self} / #{children.map(&:head)}" if self.link
+
       case @type
+      # Section nodes  
+      when :imports
+        "\n%s;;============= %s SECTION ===============\n" % [' '*2*indent, @type.to_s.upcase] +
+        children.map { |wn| wn.transpile(indent) }.join('')
+      when :data
+        "\n\n%s;;============= %s SECTION ===============\n" % [' '*2*indent, @type.to_s.upcase] +
+        DAta.transpile
+      when :globals
+        "\n\n%s;;============= %s SECTION ===============\n" % [' '*2*indent, @type.to_s.upcase] +
+        Global.transpile
+      when :exports
+        "\n\n%s;;============= %s SECTION ===============\n" % [' '*2*indent, @type.to_s.upcase] +
+        Export.transpile        
       when :insn, :method
         if @template == :inline
           "\n%s%s" % [' '*2*indent, self.wasm_code]
         else
-          "\n%s(%s" % [' '*2*indent, self.wasm_code] + self.children.map { |wn| wn.transpile(indent+1) }.join('') + ')'
+          "\n%s(%s" % [' '*2*indent, self.wasm_code] + children.map { |wn| wn.transpile(indent+1) }.join('') + ')'
         end
       when :root, :class, :module, :none
         # no WAT code to generate for these nodes. Process children directly.
-        self.children.map { |wn| wn.transpile(indent) }.join('')
+        children.map { |wn| wn.transpile(indent) }.join('')
+      when :silent
+        # Do not generate any WAT code for a silent node and
+        # and its children
+        ''
       else
         raise "Error: Unknown wnode type #{@type}. No WAT code generated"
       end

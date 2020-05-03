@@ -22,7 +22,6 @@ module Rlang::Parser
     def initialize(name, klass, wtype, method_type)
       raise "Wrong method wtype argument: #{wtype.inspect}" unless wtype.is_a? WType
       @name = name
-      @export_name = nil
       @klass = klass
       @wtype = wtype || WType::DEFAULT
       @method_type = method_type
@@ -31,6 +30,8 @@ module Rlang::Parser
       logger.debug "Method created #{name} in class #{klass.name} / ID:#{self}"
       @margs = []   # method args
       @lvars = []   # local variables
+
+      @export_name = nil
     end
 
     # Setup bidirectional links between
@@ -89,6 +90,14 @@ module Rlang::Parser
       else
         "#{@klass.path_name.downcase}_c_#{name}"
       end
+    end
+
+    def imported!
+      @imported = true
+    end
+
+    def imported?
+      @imported
     end
 
     def export!(export_name=nil)

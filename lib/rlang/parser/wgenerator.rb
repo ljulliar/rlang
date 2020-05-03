@@ -112,13 +112,19 @@ module Rlang::Parser
   class WGenerator
     include Log
     attr_accessor :parser
-    attr_reader :root
+    attr_reader :root, :wn_imports, :wn_exports, :wn_globals, :wn_data, :wn_code
 
     def initialize(parser)
       @parser = parser
       @root = WTree.new().root
       @new_count = 0
       @static_count = 0
+
+      # Create section wnodes
+      @wn_imports = WNode.new(:imports, @root)
+      @wn_exports = WNode.new(:exports, @root)
+      @wn_globals = WNode.new(:globals, @root)
+      @wn_data = WNode.new(:data, @root)
 
       # define Object class and Kernel modules
       # and include Kernel in Object
@@ -283,7 +289,7 @@ module Rlang::Parser
       size_method = wnc.find_or_create_method(klass, SIZE_METHOD, :class, WType::DEFAULT)
       unless size_method.wnode
         logger.debug("Generating #{size_method.klass.name}\##{size_method.name}")
-        wns = WNode.new(:insn, wnc, true)
+        wns = WNode.new(:insn, wnc)
         wns.wtype = WType::DEFAULT 
         wns.c(:class_size, func_name: size_method.wasm_name, 
               wtype: wns.wasm_type, size: wnc.class_size)
@@ -331,12 +337,28 @@ module Rlang::Parser
       method.wnode = wn
       wn.wtype = method.wtype
       wn.c(:func, func_name: wn.method.wasm_name)
+
       # On instance method also declare a first parameter
       # called _self_ representing the pointer to the
       # object instance
       wn.create_marg(:_self_) if method.instance?
       logger.debug("Building #{method_type} method: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
       wn
+    end
+
+    def import_method(wnode, module_name, function_name)
+      # Create the import node
+      (wn_import = WNode.new(:insn, self.wn_imports)).c(:import, module_name: module_name, function_name: function_name)
+      wn_import.link = wnode
+      wnode.method.imported!
+      # now silence the method wnode so that
+      # it doesn't generate WASM code in the code section
+      wnode.silence!
+      wn_import
+    end
+
+    def export_method(wnode, export_name)
+      wnode.method.export!(export_name)
     end
 
     def params(wnode)
@@ -388,6 +410,13 @@ module Rlang::Parser
       (wn = WNode.new(:insn, wnode)).wtype = const.wtype
       wn.c(:load, wtype: const.wtype, var_name: const.wasm_name)
       WNode.new(:insn, wn).c(:addr, value: const.address)
+      wn
+    end
+
+    # Get constant addres
+    def const_addr(wnode, const)
+      (wn = WNode.new(:insn, wnode)).wtype = const.wtype
+      wn.c(:addr, value: const.address)
       wn
     end
 
@@ -457,6 +486,14 @@ module Rlang::Parser
       wn
     end
 
+
+    # Get class variable address
+    def cvar_addr(wnode, cvar)
+      (wn = WNode.new(:insn, wnode)).wtype = cvar.wtype
+      wn.c(:const, addr: cvar.address)
+      wn
+    end
+
     # Create the local variable storage node 
     def lvasgn(wnode, lvar)
       (wn = WNode.new(:insn, wnode)).wtype = lvar.wtype
@@ -497,9 +534,8 @@ module Rlang::Parser
     # Generate a phony node (generally used to create 
     # a wnode subtree under the phony node and later
     # reparent it to the proper place in the wtree)
-    def phony(wnode)
-      phony = WNode.new(:none, wnode)
-      phony
+    def phony(wnode, type=:none)
+      WNode.new(type, wnode)
     end
 
     # Static string allocation

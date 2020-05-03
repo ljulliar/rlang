@@ -68,7 +68,7 @@ module Rlang::Parser
     end
 
     def data=(value)
-      @data = DAta.new(self.wasm_name.to_sym, value, @wtype)
+      @data = DAta.new(self.path_name.to_sym, value, @wtype)
     end
 
     # the symbol form of this constant path

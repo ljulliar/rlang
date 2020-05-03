@@ -26,7 +26,7 @@ module Rlang::Parser
     end
 
     def class_name
-      @klass.name
+      @klass.path_name
     end
 
     def address
@@ -38,7 +38,7 @@ module Rlang::Parser
     end
 
     def wasm_name
-      "$#{@class_name}::#{@name}"
+      "$#{self.class_name}::#{@name}"
     end
 
     def wasm_type
