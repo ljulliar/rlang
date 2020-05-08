@@ -979,8 +979,6 @@ module Rlang::Parser
       # computed value unless a result :nil directive
       # is specified
       logger.debug "method_name: #{method_name}, wtype: #{wn_method.wtype}"
-      raise "Body for imported method #{method_name} should be empty (got #{body_node})" \
-        if (@@import && body_node)
       parse_node(body_node, wn_method, !wn_method.wtype.blank?)
 
       # Now that we have parsed the whole method we can 
