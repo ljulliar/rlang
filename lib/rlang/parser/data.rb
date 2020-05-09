@@ -39,14 +39,16 @@ module Rlang::Parser
     end
 
     def append_value(value, wtype)
+      logger.warn "Data type #{@wtype} misaligned!!! (Data[:#{@label}] value #{value} at address #{@address}" \
+        unless self.aligned?
       @value << value
       if value.is_a? String
         @@current_address += value.length
       else
-        logger.warn "Data type #{@wtype} misaligned!!! (Data[:#{@label}] value #{value} at address #{@address}" \
-          unless self.aligned?
         @@current_address += @wtype.size
       end
+      # Always make sure current address is aligned
+      self.class.align(WType::DEFAULT.size)
     end
 
     def aligned?
