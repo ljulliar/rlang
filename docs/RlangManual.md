@@ -6,10 +6,6 @@ Ruby programmers will feel at home with Rlang and non Ruby programmers will find
 
 Still, to make this Ruby to WebAssembly compilation possible a number of trade-offs had to be made. The goal of this document is to explain the features of Rlang are how it differs from plain Ruby.
 
-## The Rlang object model
-
-In Rlang you can define classes and those classes can be instantiated either statically at compile time or  dynamically at runtime. There is no inheritance mechanism today between classes in the current version. Classes cannot be nested.
-
 ## What Rlang does
 
 Rlang provides:
@@ -84,6 +80,12 @@ end
 ```
 A Class in RLang can also inherit from another class as in Ruby. Whan a superclass is not specified, a newly defined class automatically inherits from the Object class.
 
+If you need to use a class name in your code before the class is actually processed by the compiler you can use the following empty class notation to declare that the corresponding constant is actually a class. You can later reopen the class definition and define methods.
+
+```ruby
+class String; end
+```
+
 
 ### Class attributes and instance variables
 Rlang support both the use of class attributes and instance variables. Class attribute declaration is happening through the `attr_accessor`, `attr_reader` or `attr_writer` directives as in plain Ruby. It actually defines a couple of things for you:
@@ -147,6 +149,7 @@ class Test
   # ...
 end
 ```
+The address in memory of both class variables and constants can be accessed by using the `addr` method as in `SQUARE.addr` for instance.
 
 **IMPORTANT NOTE**: in the current version of Rlang the new method call used to allocate static objects doesn't do any initialization. That's why the new method in this context (class body or top level) doesn't accept any parameter.
 
@@ -180,7 +183,7 @@ class Main
     cube = Cube.new(10, 20, 30)
     v = cube.volume
     # ... Do what ever you have to do...
-    Object.free(cube)
+    cube.free
   end
 end
 ```
@@ -270,6 +273,25 @@ end
 ```
 
 Note that the `export` keyword only applies to the method definition that immediately follows. In the example above `MyClass::visible` and `MyClass::visible_too` will be exported by the generated WASM module whereas `MyClass::not_visible` will not.
+
+### Importing a method
+An import statement in WebAssembly is a way to declare the signature of a method defined outside of the current WebAssembly module and then call it from your code.
+
+Rlang has an equivalent import statement as shown in the example below:
+```ruby
+import :wasi_unstable, :proc_exit
+def self.proc_exit(exitcode)
+  arg exitcode: :I32
+  result :none
+end
+```
+
+The first 2 arguments of import are the imported module name and function name as in WebAssembly and then follows a regular method definition with arguments and possibly the `arg` directive to specify argument types and a `result` directive to indicate the nature of the returned value. Two points worth highlighting here:
+1. The Rlang method name doesn't have to be the same as the function name in the import statement.
+2. As imported function are external to your Rlang module they must be declared as class methods. This is bacause defining them as instance method would automatically pass `self` as the first argument in the method call therefore changing the signature of the method.
+
+The example above is taken from the Rlang WASI class that defines the interface with [WASI (WebAssembly System Interface)](https::wasi.dev).
+
 
 ## Rlang types
 The types currently supported by Rlang are integers either long (`:I32`) or double (`:I64`) or a class type. Float types (`:F32`, `:F64`) may follow in a future version. By default Rlang assumes that any integer literal, variable, argument,... is of type `:I32`. If you need it to be of a different type you must state it explicitely in the method body (see above).

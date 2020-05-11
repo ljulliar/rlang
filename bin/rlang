@@ -13,13 +13,16 @@
 
 require 'optparse'
 require 'fileutils'
-require 'rlang'
+require 'rlang' # setup RLANG_BASE_DIR
 require 'builder'
+
+RLANG_LIB_DIR = File.expand_path('./rlang/lib', RLANG_BASE_DIR)
 
 include Log
 logger.level = Logger::INFO
 
 options = {}
+custom_load_path = []
 OptionParser.new do |opts|
   opts.banner = %q{Usage: rlang [options] filename
   read a Rlang file, check it for errors, and convert it
@@ -39,8 +42,8 @@ options:
 }
 
   opts.on("-I DIR", "--load_path DIRECTORY", "specify $LOAD_PATH directory (may be used more than once)") do |dir|
-    options[:LOAD_PATH] ||= []
-    options[:LOAD_PATH] << dir
+    custom_load_path ||= []
+    custom_load_path << dir
   end
 
   opts.on("-M", "--module NAME", "WASM module name") do |name|
@@ -93,7 +96,7 @@ end.parse!(ARGV)
 
 options[:module]     ||= '' 
 options[:memory_min] ||= 4
-options[:LOAD_PATH]  ||= []
+options[:LOAD_PATH]  = custom_load_path << RLANG_LIB_DIR
 options[:start]      ||= '_start'
 
 fh_out = options[:output] ? File.open(options[:output], 'w') : STDOUT

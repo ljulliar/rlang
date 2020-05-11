@@ -1,4 +1,4 @@
-require 'test_def_two_args'
+require_relative './test_def_two_args'
 
 class Test
   export

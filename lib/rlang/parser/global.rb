@@ -52,7 +52,8 @@ module Rlang::Parser
       '(export  "%s" (global %s (mut %s)))' % [self.export_name, self.wasm_name, self.wtype.wasm_type]
     end
 
-    def self.transpile
+    def self.transpile(depth)
+      indent = ' ' * depth * 2
       output = []
       @@globals.each do |g|
         if g.mutable?
@@ -63,7 +64,7 @@ module Rlang::Parser
                     % {name: g.wasm_name, type: g.wtype.wasm_type, value: g.value}
         end
       end
-      output.join("\n")
+      indent + output.join("\n#{indent}")
     end
   end
 end

@@ -122,9 +122,17 @@ module Rlang::Parser
 
       # Create section wnodes
       @wn_imports = WNode.new(:imports, @root)
+      @wn_memory  = WNode.new(:memory, @root)
       @wn_exports = WNode.new(:exports, @root)
       @wn_globals = WNode.new(:globals, @root)
       @wn_data = WNode.new(:data, @root)
+
+      # Module code generation
+      @root.c(:module, module: parser.config[:module])
+
+      # Memory code generation
+      WNode.new(:insn, @wn_memory). \
+        c(:memory, min: parser.config[:memory_min], max: parser.config[:memory_max])
 
       # define Object class and Kernel modules
       # and include Kernel in Object
@@ -228,17 +236,24 @@ module Rlang::Parser
     def declare_method(wnode, wtype, method_name, result_type)
       class_path = wtype.class_path
       logger.debug "Declaring method #{method_name} in class #{class_path}"
-      klass = WNode.root.find_or_create_class(class_path, [])
+      klass = WNode.root.find_class_or_module(class_path)
+      raise "Can't find class or module #{class_path} in method declaration" unless klass
+      method_types = []
       if method_name[0] == '#'
-        method_type = :instance
+        method_types << :instance
+        method_types << :class if klass.const.module?
         mth_name = method_name[1..-1].to_sym
       else
-        method_type = :class
+        method_types << :class
+        method_types << :instance if klass.const.module?
         mth_name = method_name.to_sym
       end
-      (m = wnode.find_or_create_method(klass, mth_name, method_type, nil)).wtype = WType.new(result_type)
-      logger.debug "Declared #{method_type} method #{m.name} in class #{m.klass.name} with wtype #{m.wtype.name}"
-      m
+      mth = method_types.each do |mt|
+        (m = wnode.find_or_create_method(klass, mth_name, mt, nil)).wtype = WType.new(result_type)
+        logger.debug "Declared #{mt} method #{m.name} in class #{m.klass.name} with wtype #{m.wtype.name}"
+        m
+      end
+      mth
     end
   
     # Postprocess ivars
@@ -338,11 +353,9 @@ module Rlang::Parser
       wn.wtype = method.wtype
       wn.c(:func, func_name: wn.method.wasm_name)
 
-      # On instance method also declare a first parameter
-      # called _self_ representing the pointer to the
-      # object instance
+      # Instance methods 1st argument is always self
       wn.create_marg(:_self_) if method.instance?
-      logger.debug("Building #{method_type} method: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
+      logger.debug("Built #{method_type} method definition: wn.wtype #{wn.wtype}, wn.method #{wn.method}")
       wn
     end
 
@@ -745,7 +758,7 @@ module Rlang::Parser
       # no need to define new method for native types
       return if wnode_class.klass.wtype.native?
       if (new_mth = wnode_class.find_method(k, :new, :class, true))
-        return if new_mth.wnode # already implemented
+        return if new_mth.implemented? # already implemented
       end
       
       logger.debug "Creating code for #{k.name}.new"

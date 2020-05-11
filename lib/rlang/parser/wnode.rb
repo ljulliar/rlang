@@ -59,7 +59,9 @@ module Rlang::Parser
   (%{wtype}.store offset=%{offset} (local.get $_self_) (local.get %{attr_name}))},
       class_size: %q{func %{func_name} (result %{wtype})
   (%{wtype}.const %{size})},
-      comment: ';; %{comment}'
+      comment: ';; %{comment}',
+      memory: 'memory $0 %{min} %{max}',
+      module: 'module %{module}'
     }
 
     attr_accessor :type, :wargs, :children, :parent, :comment, 
@@ -174,7 +176,7 @@ module Rlang::Parser
     end
     alias :<< :add_child
 
-    # Remove child to current node
+    # Remove child from current node
     def remove_child(wnode)
       logger.debug "Removing #{wnode.object_id} from wnodes list #{self.children.map(&:object_id)} under parent #{self.parent.object_id}"
       unless (wn = self.children.delete(wnode)) && wn == wnode
@@ -705,36 +707,37 @@ module Rlang::Parser
     end
 
     # Generate WAT code starting for this node and tree branches below
-    def transpile(indent=0)
+    def transpile(depth=0)
       # follow children first and then go on with
       # the wnode link if it exits
       children = self.children + (self.link ? [self.link] : [])
-
+      indent = ' ' * depth * 2
       logger.debug "children: #{self} / #{children.map(&:head)}" if self.link
 
       case @type
       # Section nodes  
       when :imports
-        "\n%s;;============= %s SECTION ===============\n" % [' '*2*indent, @type.to_s.upcase] +
-        children.map { |wn| wn.transpile(indent) }.join('')
+        "\n%s;;============= %s SECTION ===============\n" % [indent, @type.to_s.upcase] +
+        children.map { |wn| wn.transpile(depth) }.join('')
       when :data
-        "\n\n%s;;============= %s SECTION ===============\n" % [' '*2*indent, @type.to_s.upcase] +
-        DAta.transpile
+        "\n\n%s;;============= %s SECTION ===============\n" % [indent, @type.to_s.upcase] +
+        DAta.transpile(depth)
       when :globals
-        "\n\n%s;;============= %s SECTION ===============\n" % [' '*2*indent, @type.to_s.upcase] +
-        Global.transpile
+        "\n\n%s;;============= %s SECTION ===============\n" % [indent, @type.to_s.upcase] +
+        Global.transpile(depth)
       when :exports
-        "\n\n%s;;============= %s SECTION ===============\n" % [' '*2*indent, @type.to_s.upcase] +
-        Export.transpile        
-      when :insn, :method
+        "\n\n%s;;============= %s SECTION ===============\n" % [indent, @type.to_s.upcase] +
+        "%s(export \"memory\" (memory $0))\n" % [indent] +
+        Export.transpile(depth)        
+      when :insn, :method, :root
         if @template == :inline
-          "\n%s%s" % [' '*2*indent, self.wasm_code]
+          "\n%s%s" % [indent, self.wasm_code]
         else
-          "\n%s(%s" % [' '*2*indent, self.wasm_code] + children.map { |wn| wn.transpile(indent+1) }.join('') + ')'
+          "\n%s(%s" % [indent, self.wasm_code] + children.map { |wn| wn.transpile(depth+1) }.join('') + ')'
         end
-      when :root, :class, :module, :none
+      when :class, :module, :none, :memory
         # no WAT code to generate for these nodes. Process children directly.
-        children.map { |wn| wn.transpile(indent) }.join('')
+        children.map { |wn| wn.transpile(depth) }.join('')
       when :silent
         # Do not generate any WAT code for a silent node and
         # and its children

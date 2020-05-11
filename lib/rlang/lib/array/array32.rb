@@ -5,12 +5,13 @@
 # 4 bytes object array class
 require_relative '../memory'
 require_relative '../kernel'
-require_relative '../object'
-require_relative '../string'
+#require_relative '../string'
 
 
 class Array32
   attr_reader :count, :ptr
+
+  result :Kernel, :raise, :none
 
   # count: number of elements in Array
   # Array elements are native types or
@@ -38,6 +39,12 @@ class Array32
     # offset in memory for elt #idx is idx * 4
     Memory.store32(@ptr + (idx << 2), value)
     value
+  end
+
+  def free
+    result :none
+    Object.free(@ptr)
+    Object.free(self)
   end
 
 end

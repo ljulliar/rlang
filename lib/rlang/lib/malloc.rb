@@ -8,8 +8,8 @@
 # For a detailed explanation of the allocator code see
 # https://gnuchops.wordpress.com/2013/02/26/memory-allocator-for-embedded-system-k-r-ritchie-book/
 
-require 'rlang/lib/memory'
-require 'rlang/lib/unistd'
+require_relative './memory'
+require_relative './unistd'
 
 # minimum number of units to request
 $NALLOC = 1024

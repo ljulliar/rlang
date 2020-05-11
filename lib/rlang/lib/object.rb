@@ -6,6 +6,7 @@
 
 require_relative './malloc'
 require_relative './kernel'
+require_relative './string'
 
 class Object
 
@@ -19,5 +20,10 @@ class Object
   def self.free(object_ptr)
     result :none
     Malloc.free(object_ptr)
+  end
+
+  def to_s
+    result :String
+    "Object <addr>"
   end
 end

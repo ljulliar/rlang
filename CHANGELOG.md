@@ -1,3 +1,7 @@
+## 0.5.1
+* Imported WASM methods can now be defined
+* Preliminary version of WASI interface and IO class added to Rlang library
+
 ## 0.5.0
 * Class attributes syntax now identical to plain Ruby
 * Class in class definition and module supported

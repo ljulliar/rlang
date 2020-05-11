@@ -7,4 +7,4 @@
 # the memory Class and instantiate it in the Wasmer 
 # run time
 
-require 'rlang/lib/memory'
+require 'memory'

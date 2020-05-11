@@ -4,7 +4,6 @@
 #
 # 4 bytes object array class
 require_relative '../memory'
-require_relative '../kernel'
 require_relative '../object'
 require_relative '../string'
 
@@ -38,6 +37,12 @@ class Array64
     # offset in memory for elt #idx is idx * 8
     Memory.store64(@ptr + (idx << 3), value)
     value
+  end
+
+  def free
+    result :none
+    Object.free(@ptr)
+    Object.free(self)
   end
 
 end

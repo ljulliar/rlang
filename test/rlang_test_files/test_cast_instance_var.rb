@@ -1,4 +1,4 @@
-require 'rlang/lib'
+require 'rlang_core'
 
 class Test
   # Force first init with i64 value

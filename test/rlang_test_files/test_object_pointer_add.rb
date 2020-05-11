@@ -1,4 +1,4 @@
-require 'rlang/lib'
+require 'rlang_core'
 require_relative './cube'
 
 class Test

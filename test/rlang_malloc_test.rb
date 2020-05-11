@@ -13,7 +13,7 @@ $-w = false
 class RlangMallocTest < Minitest::Test
 
   TEST_FILES_DIR = File.expand_path('../rlang_malloc_files', __FILE__)
-  RLANG_DIR = File.expand_path('../../lib', __FILE__)
+  RLANG_DIR = File.expand_path('../../lib/rlang/lib', __FILE__)
 
   # Rlang compilation options by method
   @@load_path_options = {}
@@ -24,7 +24,7 @@ class RlangMallocTest < Minitest::Test
 
     # Setup parser/compiler options
     options = {}
-    options[:LOAD_PATH] = @@load_path_options[self.name.to_sym] || []
+    options[:LOAD_PATH] = [RLANG_DIR] + (@@load_path_options[self.name.to_sym] || [])
     options[:__FILE__] = test_file
     options[:export_all] = true
     options[:memory_min] = 1
@@ -153,11 +153,14 @@ class RlangMallocTest < Minitest::Test
     # Free chain should look like this
     # (replace base_addr with the memory address of the @@base Header)
     # freep: 20 -> @20 (ptr: 10024, size: 0) -> @10024 (ptr: 20, size: 1022)
-    base_addr = 56
+    #
+    # base_addr value below may vary depending on the modification brought to
+    # Rlang core library
+    base_addr = 92
     log_free_chain("after malloc")
     
     freep = @exports.malloc_c_freep
-    assert_equal 56, freep
+    assert_equal base_addr, freep
     assert_equal @exports.global_c_heap, @exports.header_i_ptr(freep)
     assert_equal 0, @exports.header_i_size(freep)
     assert_equal freep, @exports.header_i_ptr(@exports.header_i_ptr(freep))

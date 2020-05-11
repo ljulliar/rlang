@@ -17,10 +17,11 @@ module Rlang::Parser
 
     # Export Rlang funcs, etc... grouping them
     # by object type for Wasm code readability
-    def self.transpile
-      @@exports.sort_by {|e| e.object.class.to_s}.collect do |export|
+    def self.transpile(depth)
+      indent = ' ' * depth * 2
+      indent + @@exports.sort_by {|e| e.object.class.to_s}.collect do |export|
         export.object.export_wasm_code
-      end.join("\n")
+      end.join("\n#{indent}")
     end
   end
 end

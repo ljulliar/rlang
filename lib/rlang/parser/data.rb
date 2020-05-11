@@ -91,7 +91,8 @@ module Rlang::Parser
 
     # Transpile data to WAT code
     # in order of increasing address
-    def self.transpile
+    def self.transpile(depth)
+      indent = ' ' * depth * 2
       output = []
       @@label_table.sort_by {|s,d| d.address}.each do |s,d|
         logger.debug "Generating data #{d.inspect}"
@@ -111,7 +112,7 @@ module Rlang::Parser
           end
         end
       end
-      output.join("\n")
+      indent + output.join("\n #{indent}")
     end
   end
 

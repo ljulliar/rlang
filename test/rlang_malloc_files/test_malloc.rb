@@ -23,7 +23,7 @@ $HEAP_MAX_SIZE = 1073741824  # 1GB
 # set it up)
 $HEAP_SIZE = 0
 
-require 'rlang/lib'
+require 'rlang_core'
 
 # Create methods to access globals from Wasm runtime
 # as they cannot be exported by Wasmer

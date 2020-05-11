@@ -1,4 +1,4 @@
-require 'rlang/lib'
+require 'rlang_core'
 
 MYSTRING1 = "A first string"
 MYSTRING2 = "A second waaaaaaaaaayyyyyyyy longer string"

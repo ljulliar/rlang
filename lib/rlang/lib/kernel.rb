@@ -3,15 +3,20 @@
 # All rights reserved.
 #
 # Kernel methods
+#
+# Most of the Kernel methods are defined in other files
+# to avoid requiring classes that rely on Kernel methods
+# themselves.
 
-$! = 0.cast_to(:String)
+class String; end
 
 module Kernel
 
   def raise(msg)
     arg msg: :String
     result :none
-    $! = msg
+    #$! = msg
+    #STDERR.puts msg
     inline wat: '(unreachable)', wtype: :none
   end
 

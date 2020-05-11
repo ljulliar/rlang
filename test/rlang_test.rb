@@ -13,7 +13,7 @@ $-w = false
 class RlangTest < Minitest::Test
 
   TEST_FILES_DIR = File.expand_path('../rlang_test_files', __FILE__)
-  RLANG_DIR = File.expand_path('../../lib', __FILE__)
+  RLANG_DIR = File.expand_path('../../lib/rlang/lib', __FILE__)
 
   # Rlang compilation options by method
   @@load_path_options = {
@@ -32,7 +32,7 @@ class RlangTest < Minitest::Test
 
     # Setup parser/compiler options
     options = {}
-    options[:LOAD_PATH] = @@load_path_options[self.name.to_sym] || []
+    options[:LOAD_PATH] = [RLANG_DIR] + (@@load_path_options[self.name.to_sym] || [])
     options[:__FILE__] = test_file
     options[:export_all] = true
     options[:memory_min] = 1

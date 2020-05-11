@@ -11,8 +11,18 @@ class String
   # ptr is a simple memory address of type
   # :I32 (see it as the equivalent of a
   # char * in C)
+
+  # There are 3 ways to initialize a new String object
+  #  * with a string literal (e.g. mystring = "Hello World!")
+  #  * by pointing at an existing memory location (e.g. String.new(ptr, length))
+  #  * by asking Rlang to allocate the String space when ptr is NULL (e.g. String.new(0, length))
   def initialize(ptr, length)
-    @ptr = ptr
+    result :none
+    if ptr == 0
+      @ptr = Malloc.malloc(length)
+    else
+      @ptr = ptr
+    end
     @length = length
   end
 
@@ -27,5 +37,8 @@ class String
     # Create new object string
     String.new(new_ptr, new_length)
   end
+
+  def size; @length; end
+  def to_s; self; end
 
 end

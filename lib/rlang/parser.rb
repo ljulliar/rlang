@@ -272,8 +272,12 @@ module Rlang::Parser
       super_class_path = _build_const_path(super_class_const_node)
       wn_class = @wgenerator.klass(wnode, class_path, super_class_path)
 
+      # If body node is nil then this must be interpreted as
+      # a class declaration (no implementation yet)
+      return wn_class unless body_node
+
       # Parse the body of the class
-      parse_node(body_node, wn_class) if body_node
+      parse_node(body_node, wn_class)
 
       # We finished parsing the class body so
       # 1) postprocess instance variables
@@ -1073,10 +1077,12 @@ module Rlang::Parser
         when /^\./
           # If file starts with . then look for file in pwd
           load_path = [Dir.pwd]
+=begin
         when /^rlang/
           # If it starts with rlang then look for it in the 
           # installed rlang gem in addition to load path
           load_path = self.config[:LOAD_PATH] + $LOAD_PATH
+=end
         else
           load_path = self.config[:LOAD_PATH]
           load_path = [Dir.pwd] if self.config[:LOAD_PATH].empty?
@@ -1096,7 +1102,7 @@ module Rlang::Parser
           end
         end
       end
-      raise LoadError, "no such file to load: #{full_path_file}" unless full_path_file
+      raise LoadError, "no such file to load: #{file}" unless full_path_file
 
       # Now load the file 
       if File.extname(full_path_file) == '.wat'
