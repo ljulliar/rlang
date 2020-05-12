@@ -103,7 +103,14 @@ module Rlang::Parser
     end
 
     def parse(source, wnode=nil)
-      ast = ::Parser::CurrentRuby.parse(source)
+      if config[:comments]
+        ast, comments = ::Parser::CurrentRuby.parse_with_comments(source)
+        @associated_comments = ::Parser::Source::Comment.associate(ast, comments)
+      else
+        ast = ::Parser::CurrentRuby.parse(source)
+        @associated_comments = {}
+      end
+
       parse_node(ast, wnode || @wgenerator.root) if ast
     end
 
@@ -118,7 +125,12 @@ module Rlang::Parser
       logger.debug "\n---------------------->>\n" + 
         "Parsing node: #{node}, wnode: #{wnode.head}, keep_eval: #{keep_eval}"
       # Nothing to parse
-      return if node.nil?  
+      return if node.nil?
+
+      # check if there is a comment
+      if config[:comments] && (comments = @associated_comments[node])
+        @wgenerator.comments(wnode, comments)
+      end
 
       case node.type
       when :self

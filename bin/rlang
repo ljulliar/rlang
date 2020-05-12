@@ -70,6 +70,10 @@ options:
     options[:wasm] = v
   end
 
+  opts.on("-c", "--comments", "Include comments in WAT source file") do |v|
+    options[:comments] = v
+  end
+
   opts.on("-S", "--start FUNCTION", "Function name where execution starts (default '_start')") do |function|
     options[:start] = function
   end

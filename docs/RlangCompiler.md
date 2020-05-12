@@ -19,6 +19,7 @@ Usage: rlang [options] rlang_file.rb
     -w, --wat                        Generate WAT source file
     -a, --ast                        Generate Ruby AST file
     -s, --wasm                       Generate WASM bytecode file
+    -c, --comments                   Include comments in WAT source file
     -S, --start FUNCTION             Function name where execution starts (default '_start')
     -o, --output FILE                Write output to file
     -v, --verbose [LEVEL]            Verbosity level (fatal, error, warn, info, debug)
@@ -32,6 +33,7 @@ Usage: rlang [options] rlang_file.rb
 * **-w, --wat**: parse Rlang file and generate WAT source code
 * **-a, --ast**: parse Rlang file and generate the Ruby abstract syntax tree
 * **-s, --wasm**: parse Rlang file, generate WAT source code and compile it to WASM bytecode
+* **-c, --comments**: include the Rlang comments at the corresponding location in the generated WAT source file.
 * **-S, --start**: function to use as the execution starting point of the WASM module (default is `_start`)
 * **-o, --output FILE**: send rlang output to FILE
 * **-v, --verbose [LEVEL]**: verbosity level (fatal, error, warn, info, debug). Default is warn

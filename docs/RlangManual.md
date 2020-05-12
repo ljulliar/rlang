@@ -1,6 +1,6 @@
 # The Rlang language
 
-Rlang is a subset of the Ruby language that is meant to provide a certain level of abstration and expressiveness while keeping its translation to WebAssembly straightforward. 
+Rlang is a subset of the Ruby language that is meant to provide a good level of abstraction and expressiveness while keeping its compilation to WebAssembly straightforward. 
 
 Ruby programmers will feel at home with Rlang and non Ruby programmers will find it useful to generate efficient WebAssembly code from a language that is much easier to use.
 
@@ -21,6 +21,7 @@ Rlang provides:
 * Arithmetic, relational and logical operators
 * WebAssembly source code (WAT) inlining
 * Requiring other Rlang or WAT files
+* Importing and exporting WASM functions
 * A Rlang library (written in Rlang of course) that you can reuse in your own WebAssembly module
 
 Here is a sample of Rlang code to whet your appetite:

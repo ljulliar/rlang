@@ -190,6 +190,13 @@ module Rlang::Parser
       k.wnode
     end
 
+    def comments(wnode, comments)
+      # The gsub below is to handle =begin...=end block comments
+      comments.each do |c|
+        WNode.new(:comment, wnode).c(:comment, text: c.text.sub(/^\s*#/,'').gsub("\n", "\n;;"))
+      end
+    end
+
     # Create module object and module wnode 
     # if it doesn't exist yet
     def module(wnode, module_path)

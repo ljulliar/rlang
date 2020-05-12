@@ -59,7 +59,7 @@ module Rlang::Parser
   (%{wtype}.store offset=%{offset} (local.get $_self_) (local.get %{attr_name}))},
       class_size: %q{func %{func_name} (result %{wtype})
   (%{wtype}.const %{size})},
-      comment: ';; %{comment}',
+      comment: ';; %{text}',
       memory: 'memory $0 %{min} %{max}',
       module: 'module %{module}'
     }
@@ -715,7 +715,9 @@ module Rlang::Parser
       logger.debug "children: #{self} / #{children.map(&:head)}" if self.link
 
       case @type
-      # Section nodes  
+      # Section nodes
+      when :comment
+        "\n%s%s" % [indent, self.wasm_code]
       when :imports
         "\n%s;;============= %s SECTION ===============\n" % [indent, @type.to_s.upcase] +
         children.map { |wn| wn.transpile(depth) }.join('')
