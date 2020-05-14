@@ -40,11 +40,16 @@ class IO
   end   
 
   def read
-    result :I32 #:String
+    result :String
+    local stg: :String
     iovec = WASI::IOVec.new(1)
     errno = WASI.fd_read(@fd, iovec.iovs.ptr, 1, @@num_bytes_read.addr)
     # -1 below because of \0 terminated string
-    String.new(iovec.iovs[0], @@num_bytes_read-1) 
+    stg = String.new(iovec.iovs[0], @@num_bytes_read-1) 
+    # Nullify the iovs entry used by the String object so it is not freed
+    iovec.iovs[0] = 0
+    iovec.free
+    stg
   end
 
 end
