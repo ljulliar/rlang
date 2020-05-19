@@ -1,0 +1,11 @@
+All contents here come from http://www.wolczko.com/st80/
+
+image.tar.gz:original Xerox virtual image (as provided on tape by Xerox PARC) 
+manual.pdf: the manual that came with the tape (incl. errata for the Blue Book implementation section)
+st.tar.gz: C implementation of the Smalltalk VM from Mario Wolczko
+VMsrc.shar: Smalltalk VM sourcesas re-keyed from the Blue Book by Mario Wolczko 
+
+Xerox Star
+----------
+8010_hd_images.zip: Xerox Star images. hard disk images for Viewpoint 2.0, XDE 5.0, and The Harmony release of Interlisp-D (Not Smalltalk)
+See article at https://engblg.livingcomputers.org/index.php/2019/01/19/introducing-darkstar-a-xerox-star-emulator/

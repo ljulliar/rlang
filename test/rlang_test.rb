@@ -401,6 +401,41 @@ class RlangTest < Minitest::Test
     assert_equal 70304, @instance.exports.send(@wfunc)
   end
 
+  def test_operator_binary
+    assert_equal 100, @instance.exports.send(:test_c_test_unary_plus, 90, 10)
+    assert_equal  80, @instance.exports.send(:test_c_test_unary_minus, 90, 10)
+    assert_equal 900, @instance.exports.send(:test_c_test_unary_multiply, 90, 10)
+    assert_equal   9, @instance.exports.send(:test_c_test_unary_divide, 90, 10)
+    assert_equal   0, @instance.exports.send(:test_c_test_unary_modulo, 90, 10)
+    assert_equal  10, @instance.exports.send(:test_c_test_unary_and, 90, 10)
+    assert_equal  90, @instance.exports.send(:test_c_test_unary_or, 90, 10)
+    assert_equal  80, @instance.exports.send(:test_c_test_unary_xor, 90, 10)
+    assert_equal   5, @instance.exports.send(:test_c_test_unary_shiftr, 90, 4)
+    assert_equal 360, @instance.exports.send(:test_c_test_unary_shiftl, 90, 2)
+  end
+
+  def test_operator_relational
+    assert_equal 1, @instance.exports.send(:test_c_test_binary_eq, 10, 10)
+    assert_equal 0, @instance.exports.send(:test_c_test_binary_eq, 10, 11)
+    assert_equal 1, @instance.exports.send(:test_c_test_binary_ne, 10, 11)
+    assert_equal 0, @instance.exports.send(:test_c_test_binary_ne, 10, 10)
+    assert_equal 0, @instance.exports.send(:test_c_test_binary_lt_u, 90, 10)
+    assert_equal 1, @instance.exports.send(:test_c_test_binary_lt_u, 10, 90)
+    assert_equal 1, @instance.exports.send(:test_c_test_binary_gt_u, 90, 10)
+    assert_equal 0, @instance.exports.send(:test_c_test_binary_gt_u, 10, 90)
+    assert_equal 0, @instance.exports.send(:test_c_test_binary_le_u, 90, 10)
+    assert_equal 1, @instance.exports.send(:test_c_test_binary_le_u, 10, 10)
+    assert_equal 1, @instance.exports.send(:test_c_test_binary_ge_u, 90, 4)
+    assert_equal 0, @instance.exports.send(:test_c_test_binary_ge_u, 2, 90)
+  end
+
+  def test_operator_unary
+    assert_equal -10, @instance.exports.send(:test_c_test_unary_minus, 10)
+    assert_equal 0, @instance.exports.send(:test_c_test_unary_not, 1)
+    assert_equal 0, @instance.exports.send(:test_c_test_unary_not, 1000)
+    assert_equal 1, @instance.exports.send(:test_c_test_unary_not, 0)
+  end
+
   def test_require
     assert_equal 200, @instance.exports.send(@wfunc)
   end

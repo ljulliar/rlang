@@ -50,7 +50,8 @@ module Rlang::Parser
   }
 
   UNARY_OPS_MAP = {
-    :'!'   => :eqz
+    :'!'   => :eqz,
+    :'-@'  => :sub  # special case for unary - turned into (sub 0 x)
   }
 
   ALL_OPS_MAP = [*ARITHMETIC_OPS_MAP, *RELATIONAL_OPS_MAP, *BOOLEAN_OPS_MAP, *UNARY_OPS_MAP].to_h
@@ -678,6 +679,8 @@ module Rlang::Parser
         (wn_op = WNode.new(:insn, wnode)).c(:operator, operator: op)
         wn_op.wtype = wtype
         logger.debug "Creating operator #{operator} wnode: #{wn_op}"
+        # special case for - unary operator transformed into (0 - x)
+        WNode.new(:insn, wn_op).c(:const, value: 0) if operator == :-@
         wn_op
       else
         raise "operator '#{operator}' not supported"
