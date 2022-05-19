@@ -26,6 +26,10 @@ class String
     @length = length
   end
 
+
+  def size; @length; end
+  def to_s; self; end
+
   def +(stg)
     arg stg: :String
     result :String
@@ -38,7 +42,37 @@ class String
     String.new(new_ptr, new_length)
   end
 
-  def size; @length; end
-  def to_s; self; end
+  # Only positive indices are supported for now
+  def [](idx)
+    result :String
+    # The condition below should actually return nil
+    # to be compliant with the Ruby library but we don't
+    # have nil in Rlang
+    #if (idx >= self.length) || (idx < -self.length)
+    #  return String.new(0,0)
+    #end
+    #idx = (self.length + idx) if idx < 0
+    if (idx >= self.length) 
+      return String.new(0,0)
+    end
+    stg = String.new(0,1)
+    Memory.copy(self.ptr+idx, stg.ptr, 1)
+    stg
+  end
+
+  def reverse!
+    result :String
+    size = self.size
+    half_size = size/2
+    i=0
+    while i < half_size
+      swap = Memory.load32_8(self.ptr+i)
+      Memory.store32_8(self.ptr+i, Memory.load32_8(self.ptr+size-1-i))
+      Memory.store32_8(self.ptr+size-1-i, swap)
+      i += 1
+    end
+    self
+  end
+
 
 end

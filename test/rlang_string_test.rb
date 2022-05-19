@@ -80,4 +80,23 @@ class RlangStringTest < Minitest::Test
     rlang_stg = (0..length-1).collect {|nth| mem8[0+nth].chr}.join('')
     assert_equal stg, rlang_stg
   end
+
+  def test_string_index
+    stg = "azerty"
+
+    # Index 0 to last
+    0.upto(stg.length-1) do |idx|
+      stg_obj_addr = @exports.send(@wfunc).call(idx)
+      stg_ptr = @exports.string_i_ptr.call(stg_obj_addr)
+      mem8 = @exports.memory.uint8_view stg_ptr
+      assert_equal stg[idx].ord,mem8[0], "Idx: #{idx}, Expected #{stg[idx].ord} got #{mem8[idx]}"
+    end
+
+    # Index beyond last retuns an empty string
+    idx = stg.length
+    stg_obj_addr = @exports.send(@wfunc).call(idx)
+    stg_length = @exports.string_i_length.call(stg_obj_addr)
+    assert_equal 0, stg_length
+  end
+
 end
