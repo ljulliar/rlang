@@ -39,26 +39,30 @@ class RlangArrayTest < Minitest::Test
     end
 
     # Instantiate wasmer runtime
-    bytes = File.read(@builder.target)
-    @instance = Wasmer::Instance.new(bytes)
+    # Let's define the store, that holds the engine, that holds the compiler.
+    store = Wasmer::Store.new
+    # Let's compile the module to be able to execute it!
+    module_ = Wasmer::Module.new store, IO.read(@builder.target, mode: "rb")
+    # Now the module is compiled, we can instantiate it.
+    @instance = Wasmer::Instance.new module_, nil
     @exports = @instance.exports
   end
 
   def test_array32_dynamic_init
-    assert_equal 2220, @instance.exports.send(@wfunc)
+    assert_equal 2220, @instance.exports.send(@wfunc).call
   end
 
   def test_array32_set
-    array_obj_addr = @instance.exports.send(@wfunc)
+    array_obj_addr = @instance.exports.send(@wfunc).call
     # For the 32bit memory view port divide address by 4
-    mem32 = @instance.memory.uint32_view  array_obj_addr/4
+    mem32 = @instance.exports.memory.uint32_view array_obj_addr/4
 
     assert_equal 100, mem32[0] # array length
     array_ptr = mem32[1] # pointer to first array_elements
-    mem8 = @instance.memory.uint32_view array_ptr/4
+    mem8 = @instance.exports.memory.uint32_view array_ptr/4
 
     # For the 32bit memory view port divide address by 4
-    array = @instance.memory.uint32_view array_ptr/4
+    array = @instance.exports.memory.uint32_view array_ptr/4
     0.upto(99) do |idx|
       assert_equal idx*2, array[idx]
     end
@@ -66,19 +70,19 @@ class RlangArrayTest < Minitest::Test
 
   def test_array32_get
     multiplier = 5
-    array_obj_addr = @instance.exports.send(:test_c_test_array32_set, multiplier)
+    array_obj_addr = @instance.exports.test_c_test_array32_set.call(multiplier)
 
     0.upto(99) do |idx|
-      assert_equal multiplier * idx, @instance.exports.send(:test_c_test_array32_get, idx)
+      assert_equal multiplier * idx, @instance.exports.test_c_test_array32_get.call(idx)
     end
   end
 
   def test_array64_get
     # Initialize and set up the array
-    @instance.exports.send(:test_c_test_array64_set)
+    @instance.exports.test_c_test_array64_set.call
     # Test each array element
     0.upto(19) do |idx|
-      assert @instance.exports.send(:test_c_test_array64_get, idx)
+      assert @instance.exports.test_c_test_array64_get.call(idx)
     end
   end
 

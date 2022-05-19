@@ -36,34 +36,38 @@ class RlangMemoryTest < Minitest::Test
     end
 
     # Instantiate wasmer runtime
-    bytes = File.read(@builder.target)
-    @instance = Wasmer::Instance.new(bytes)
+    # Let's define the store, that holds the engine, that holds the compiler.
+    store = Wasmer::Store.new
+    # Let's compile the module to be able to execute it!
+    module_ = Wasmer::Module.new store, IO.read(@builder.target, mode: "rb")
+    # Now the module is compiled, we can instantiate it.
+    @instance = Wasmer::Instance.new module_, nil
     @exports = @instance.exports
   end
 
   def test_initial_memory_size
-    assert_equal @@initial_page_count, @exports.memory_c_size
+    assert_equal @@initial_page_count, @exports.memory_c_size.call
   end
 
   def test_grow_zero_page
-    assert_equal @@initial_page_count, @exports.memory_c_grow(0)
-    assert_equal @@initial_page_count, @exports.memory_c_size
+    assert_equal @@initial_page_count, @exports.memory_c_grow.call(0)
+    assert_equal @@initial_page_count, @exports.memory_c_size.call
   end
 
   def test_grow_one_page
-    assert_equal @@initial_page_count, @exports.memory_c_grow(1)
-    assert_equal @@initial_page_count+1, @exports.memory_c_size
+    assert_equal @@initial_page_count, @exports.memory_c_grow.call(1)
+    assert_equal @@initial_page_count+1, @exports.memory_c_size.call
   end
 
   def test_grow_ten_pages
-    assert_equal @@initial_page_count, @exports.memory_c_grow(10)
-    assert_equal @@initial_page_count+10, @exports.memory_c_size
+    assert_equal @@initial_page_count, @exports.memory_c_grow.call(10)
+    assert_equal @@initial_page_count+10, @exports.memory_c_size.call
   end
 
   def test_grow_five_pages_twice
-    assert_equal @@initial_page_count, @exports.memory_c_grow(5)
-    assert_equal @@initial_page_count+5, @exports.memory_c_size
-    assert_equal @@initial_page_count+5, @exports.memory_c_grow(5)
-    assert_equal @@initial_page_count+10, @exports.memory_c_size
+    assert_equal @@initial_page_count, @exports.memory_c_grow.call(5)
+    assert_equal @@initial_page_count+5, @exports.memory_c_size.call
+    assert_equal @@initial_page_count+5, @exports.memory_c_grow.call(5)
+    assert_equal @@initial_page_count+10, @exports.memory_c_size.call
   end
 end

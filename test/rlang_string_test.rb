@@ -39,40 +39,44 @@ class RlangStringTest < Minitest::Test
     end
 
     # Instantiate wasmer runtime
-    bytes = File.read(@builder.target)
-    @instance = Wasmer::Instance.new(bytes)
+    # Let's define the store, that holds the engine, that holds the compiler.
+    store = Wasmer::Store.new
+    # Let's compile the module to be able to execute it!
+    module_ = Wasmer::Module.new store, IO.read(@builder.target, mode: "rb")
+    # Now the module is compiled, we can instantiate it.
+    @instance = Wasmer::Instance.new module_, nil
     @exports = @instance.exports
   end
 
   def test_string_dynamic_init
     stg = "A first string."
     length = stg.length
-    stg_obj_addr = @instance.exports.send(@wfunc)
+    stg_obj_addr = @exports.send(@wfunc).call
     # For the 32bit memory view port divide address by 4
-    mem32 = @instance.memory.uint32_view stg_obj_addr/4
+    mem32 = @exports.memory.uint32_view stg_obj_addr/4
 
     assert_equal stg.length, mem32[0] # string length
     stg_ptr = mem32[1] # pointer to string literal
 
-    mem8 = @instance.memory.uint8_view stg_ptr
+    mem8 = @exports.memory.uint8_view stg_ptr
     rlang_stg = (0..length-1).collect {|nth| mem8[0+nth].chr}.join('')
     assert_equal stg, rlang_stg
   end
 
   def test_string_static_init
-    assert_equal 14042, @instance.exports.send(@wfunc)
+    assert_equal 14042, @exports.send(@wfunc).call
   end
 
   def test_string_concat
     stg = "A first string." + " And a second one"
     length = stg.length
-    stg_obj_addr = @instance.exports.send(@wfunc)
+    stg_obj_addr = @exports.send(@wfunc).call
 
     # For the 32bit memory view port divide address by 4
-    assert_equal length, @instance.exports.string_i_length(stg_obj_addr)
+    assert_equal length, @exports.string_i_length.call(stg_obj_addr)
 
-    stg_ptr = @instance.exports.string_i_ptr(stg_obj_addr)
-    mem8 = @instance.memory.uint8_view stg_ptr
+    stg_ptr = @exports.string_i_ptr.call(stg_obj_addr)
+    mem8 = @exports.memory.uint8_view stg_ptr
     rlang_stg = (0..length-1).collect {|nth| mem8[0+nth].chr}.join('')
     assert_equal stg, rlang_stg
   end
