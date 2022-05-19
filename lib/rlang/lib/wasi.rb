@@ -9,12 +9,15 @@ require_relative './string'
 
 ARGC = 0
 ARGV = 0.cast_to(:Array32)
+ENV  = 0.cast_to(:Array32)
 
 class WASI
   STDIN_FD  = 0
   STDOUT_FD = 1
   STDERR_FD = 2
   @@argv_buf_size = 0
+  @@environc = 0
+  @@environ_buf_size = 0
 
   class CIOVec
     attr_reader :ciovs
@@ -81,9 +84,15 @@ class WASI
   # Import WASI functions
   import :wasi_unstable, :args_sizes_get
   def self.args_sizes_get(argc, args_size); end
-  
+
   import :wasi_unstable, :args_get
   def self.args_get(argv, argv_buf); end
+  
+  import :wasi_unstable, :environ_get
+  def self.environ_get(environ, environ_buf); end
+
+  import :wasi_unstable, :environ_sizes_get
+  def self.environ_sizes_get(environc, environ_buf_size); end
 
   import :wasi_unstable, :fd_write
   def self.fd_write(fd, iovs, iovs_count, nwritten_ptr); end
@@ -94,10 +103,8 @@ class WASI
   import :wasi_unstable, :proc_exit
   def self.proc_exit(exitcode); result :none; end
 
-  # Initialize WASI environment and related Rlang
-  # objects (ARGC, ARGV,...)
-  def self.init
-    local argv: :Array32
+  def self.argv_init
+    local argv: :Array32, environ: :Array32
 
     # Get number of arguments and their total size
     errno = WASI.args_sizes_get(ARGC.addr, @@argv_buf_size.addr)
@@ -108,7 +115,7 @@ class WASI
     #
     # Setup an extra slot in argv array to simplify the
     # loop below
-    argv = Array32.new(ARGC+1) #Malloc.malloc((ARGC+1) * 4) # Assuming I32 for pointers
+    argv = Array32.new(ARGC+1) # Assuming I32 for pointers
     argv_buf = Malloc.malloc(@@argv_buf_size)
     errno = WASI.args_get(argv.ptr, argv_buf)
 
@@ -124,9 +131,53 @@ class WASI
     while i < ARGC
       length = argv[i+1] - argv[i] - 1 # -1 because of null terminated
       ARGV[i] = String.new(argv[i], length)
+      # Nullify argv[i] so that String is not freed
+      argv[i] = 0
       i += 1
     end
+    argv.free
     return errno
+  end
+
+  # Initialize WASI environment and related Rlang
+  # objects (ARGC, ARGV,...)
+  def self.environ_init
+    local environ: :Array32
+
+    # Get environ variable count and buf size
+    errno = WASI.environ_sizes_get(@@environc.addr, @@environ_buf_size.addr)
+    raise "Errno environ_sizes_get" if errno != 0
+
+    # Allocate memory areas to receive the env var pointers
+    # (env) and the env var strings (env_buf)
+    environ = Array32.new(@@environc+1) # Assuming I32 for pointers
+    environ_buf = Malloc.malloc(@@environ_buf_size)
+    errno = WASI.environ_get(environ.ptr, environ_buf)
+
+    raise "Errno environ_get" if errno != 0
+    environ[@@environc] = environ[0] + @@environ_buf_size
+
+    # Workaround to avoid dynamic constant assignment error
+    Memory.store32(ENV.addr, Array32.new(@@environc))
+
+    # Now scan through arguments and turn them into a Rlang
+    # Array of Strings (like ARGV in Ruby)
+    i = 0
+    while i < @@environc
+      length = environ[i+1] - environ[i] - 1 # -1 because of null terminated
+      ENV[i] = String.new(environ[i], length)
+      # Nullify environ[i] so that String is not freed
+      #environ[i] = 0
+      i += 1
+    end
+    #environ.free
+
+    return errno
+  end
+
+  def self.init
+    self.argv_init
+    self.environ_init
   end
 
 end
