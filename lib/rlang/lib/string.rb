@@ -33,13 +33,13 @@ class String
   def +(stg)
     arg stg: :String
     result :String
-    new_length = self.length + stg.length
-    # allocate space for concatenated string
-    new_ptr = Malloc.malloc(new_length)
-    Memory.copy(self.ptr, new_ptr, self.length)
-    Memory.copy(stg.ptr, new_ptr + self.length, stg.length)
-    # Create new object string
-    String.new(new_ptr, new_length)
+
+    # Create new object string with proper size
+    s = String.new(0, self.length + stg.length)
+    # Copy both strings in the new one
+    Memory.copy(self.ptr, s.ptr, self.length)
+    Memory.copy(stg.ptr, s.ptr + self.length, stg.length)
+    s
   end
 
   # Only positive indices are supported for now
