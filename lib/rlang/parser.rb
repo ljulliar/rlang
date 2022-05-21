@@ -1975,14 +1975,14 @@ module Rlang::Parser
       types = {}
       # Is this a hash Node ?
       unless hash_node.respond_to?(:type) && hash_node.type == :hash
-        rlse node, "#{entity} expects a hash argument (got #{hash_node}" \
+        rlse hash_node, "#{entity} expects a hash argument (got #{hash_node}" \
       end
       logger.debug "#{entity} hash node: #{hash_node}"
       hash_node.children.each do |pair_node|
         name_node, type_node = pair_node.children
-        rlse node, "The name of an #{entity} must be a symbol (got #{name_node})" \
+        rlse name_node, "The name of an #{entity} must be a symbol (got #{name_node})" \
           unless name_node.type == :sym
-        rlse node, "The type of an #{entity} must be a symbol (got #{type_node})" \
+        rlse type_node, "The type of an #{entity} must be a symbol (got #{type_node})" \
           unless type_node.type == :sym
         name = name_node.children.last
         type = type_node.children.last
