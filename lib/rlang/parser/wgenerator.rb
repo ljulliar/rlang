@@ -648,7 +648,7 @@ module Rlang::Parser
     end
 
     def cast_error(wnode, wtype, signed)
-      raise "Cannot cast type #{src} to #{dest}. Time to fix your code :-)"
+      raise "Cannot cast type #{wnode.wtype} to #{wtype}. Time to fix your code :-)"
     end
 
     # cast an expression to a different type
