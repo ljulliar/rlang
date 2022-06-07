@@ -53,6 +53,13 @@ module Rlang::Parser
     end
 
     def self.transpile(depth)
+      # TODO : we should probably do that in a less "hardcoded" way
+      # Adjust the Heap base address to start after the static DAta
+      # section
+      g_heap = Global.find(:$HEAP)
+      g_heap.value = [DAta.align(8), g_heap.value].max if g_heap
+      
+      # Go generate code now
       indent = ' ' * depth * 2
       output = []
       @@globals.each do |g|
