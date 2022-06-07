@@ -5,6 +5,7 @@
 # 4 bytes object array class
 require_relative '../memory'
 require_relative '../object'
+require_relative '../type'
 require_relative '../string'
 
 
@@ -16,12 +17,19 @@ class Array64
   # pointers to objects
   # Arrays are fixed size for now
   def initialize(count)
-    @ptr = Object.allocate(count * 8)
+    # Avoid allocating 0 bytes in memory
+    if count == 0
+      @ptr = 0
+    else
+      # Memory size is count * 8 bytes
+      @ptr = Object.allocate(count << 3)
+    end
     @count = count
   end
 
   def size; @count; end
   def length; @count; end
+  def empty?; self.size == 0; end
 
   def [](idx)
     result :I64

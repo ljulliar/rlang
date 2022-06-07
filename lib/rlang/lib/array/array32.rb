@@ -5,6 +5,7 @@
 # 4 bytes object array class
 require_relative '../memory'
 require_relative '../kernel'
+require_relative '../type'
 #require_relative '../string'
 
 
@@ -18,12 +19,17 @@ class Array32
   # pointers to objects
   # Arrays are fixed size for now
   def initialize(count)
-    @ptr = Object.allocate(count * 4)
+    if count == 0
+      @ptr = 0
+    else
+      @ptr = Object.allocate(count * I32.size)
+    end
     @count = count
   end
 
   def size; @count; end
   def length; @count; end
+  def empty?; @count == 0; end
 
   def [](idx)
     result :I32
