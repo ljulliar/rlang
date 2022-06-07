@@ -38,6 +38,8 @@ module Rlang::Parser
       @@current_address = 0
     end
 
+    # Append a value to the DAta object 
+    # and return this DAta object
     def append_value(value, wtype)
       logger.warn "Data type #{@wtype} misaligned!!! (Data[:#{@label}] value #{value} at address #{@address}" \
         unless self.aligned?
@@ -49,6 +51,7 @@ module Rlang::Parser
       end
       # Always make sure current address is aligned
       self.class.align(WType::DEFAULT.size)
+      self
     end
 
     def aligned?
@@ -64,6 +67,8 @@ module Rlang::Parser
       @@label_table[label].address
     end
 
+    # Append a value to the DAta object identified by the
+    # label and return this DAta object object
     def self.append(label, value, wtype=WType::DEFAULT)
       logger.debug "appending #{value} to DAta[#{label}]"
       if self.exist? label
