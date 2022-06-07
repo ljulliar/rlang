@@ -52,13 +52,13 @@ module Rlang::Parser
       br_if: 'br_if %{label}',
       br: 'br %{label}',
       inline: '%{code}',
-      attr_getter: %q{func %{func_name} (param $_self_ i32) (result %{wtype})
-  (%{wtype}.load offset=%{offset} (local.get $_self_))},
-      attr_setter: %q{func %{func_name} (param $_self_ i32) (param %{attr_name} %{wtype}) (result %{wtype})
+      attr_getter: %q{func %{func_name} (param $_self_ i32) (result %{wasm_type})
+  (%{wasm_type}.load offset=%{offset} (local.get $_self_))},
+      attr_setter: %q{func %{func_name} (param $_self_ i32) (param %{attr_name} %{wasm_type}) (result %{wasm_type})
   (local.get %{attr_name})
-  (%{wtype}.store offset=%{offset} (local.get $_self_) (local.get %{attr_name}))},
-      class_size: %q{func %{func_name} (result %{wtype})
-  (%{wtype}.const %{size})},
+  (%{wasm_type}.store offset=%{offset} (local.get $_self_) (local.get %{attr_name}))},
+      class_size: %q{func %{func_name} (result %{wasm_type})
+  (%{wasm_type}.const %{size})},
       comment: ';; %{text}',
       memory: 'memory $0 %{min} %{max}',
       module: 'module %{module}'
@@ -126,17 +126,37 @@ module Rlang::Parser
     def c(template, wargs = {})
       raise "Error: unknown WASM code template (#{template})" unless T.has_key? template
       raise "Error: this WNode is already populated with instruction #{@template}" if @template
-      if [:loop, :block].include? template
-        wargs[:label] = self.set_label
-      end
+      #if [:loop, :block].include? template
+      #  wargs[:label] = self.set_label
+      #end
       @template = template
       @wargs = wargs
     end
 
     def wasm_code
-      @wargs[:wasm_type] ||= self.wasm_type
+      return '' unless T[@template]
       wargs = {}
       @wargs.each { |k, v| wargs[k] = (v.is_a?(Proc) ? v.call : v) }
+      # Because WNode#to_s generate wasm code from sometimes incomplete
+      # information, we must add the wasm_type key if needed by the template
+      if T[@template].index("%{wasm_type}")
+        puts "*** adding wasm_type to #{T[@template]}" unless wargs.has_key? :wasm_type
+        wargs[:wasm_type] ||= self.wasm_type
+      end
+
+      # debug code to activate if you get 
+      # a Ruby warning on too many or too few arguments
+      # wargs.each do |k, v|
+      #  if T[@template].index("%{#{k.to_s}}").nil? 
+      #    puts "**** Error wargs missing keys in wargs : template: #{@template} / wargs: #{wargs.inspect}"
+      #  end
+      # end
+      #T[@template].scan(/%{([^}]+)}/).flatten.each do |k|
+      #  unless wargs.has_key? k.to_sym
+      #    puts "**** Error wargs missing keys in template: template: #{@template} / wargs: #{wargs.inspect}"
+      #  end
+      # end
+      #logger.debug "code template : #{@template} / T : #{T[@template]} / wargs : #{wargs.inspect}" if @template
       T[@template] ? T[@template] % wargs : ''
     end
 
@@ -154,8 +174,13 @@ module Rlang::Parser
       logger.debug "Setting wtype #{wtype} for wnode #{self}"
       @wtype = wtype
       @method.wtype = @wtype if self.method?
-      # update wasm_type template arg accordingly
-      @wargs[:wasm_type] = @wtype.wasm_type if @wtype
+      # update wasm_type template arg accordingly if ti is already set
+      # (this is needed in some cases - e.g. operands - where node wtype
+      # is known once the wtypes of the children nodes are known )
+      if @wtype && @wargs.has_key?(:wasm_type)
+        logger.debug "Updating @wargs[:wasm_type] from '#{@wargs[:wasm_type]}' to '#{@wtype.wasm_type}'"
+        @wargs[:wasm_type] = @wtype.wasm_type
+      end
       logger.debug "type #{self.type} wargs #{self.wargs} wtype #{@wtype}"
       @wtype
     end

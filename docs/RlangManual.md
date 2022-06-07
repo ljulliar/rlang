@@ -511,6 +511,7 @@ For now, the Rlang library is very modest and containoffers the following classe
   * Malloc.malloc(nbytes) : dynamically allocates nbytes of memory and return address of the allocated memory space or -1 if it fails
   * Malloc.free(address) : frees the block of memory at the given address
 * **Object** class: provides a couple of object management method. Use `Object.free` to free an object.
+* **Array32**, **Array64** : Arrays can be initialized with the usual bracket operator '[]'. When the array is initialized at compile time (statically) such as for constants or class variables you can only use integers in the array initializers (e.g.`[0, 100, 200]`). When the array is initialized at runtime (dynamically) such as in the body of a method definition you can either use integers or any Rlang object (e.g. `[ 1, 2, "A string", my_object]`)
 * **String** class: string are initialized in Rlang by using a string literal like `"This is my string"`. String methods supported are very minimal for the moment. See [rlang/lib/String.rb](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/string.rb). Feel free to improve.
 
 As a side note, the dynamic memory allocator currently used in Rlang is shamelessly adapted from the example provided in the famous Kernigan & Richie C book 2nd edition. Take a look at the [C version](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.c) and see how easy it is to rewrite it in [Rlang](https://github.com/ljulliar/rlang/blob/master/lib/rlang/lib/malloc.rb).

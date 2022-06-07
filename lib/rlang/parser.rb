@@ -231,6 +231,9 @@ module Rlang::Parser
       when :str
         wn = parse_string(node, wnode, keep_eval)
 
+      when :array
+        wn = parse_array(node, wnode, keep_eval)
+
       else
         rlse node, "Unknown node type: #{node.type} => #{node}"
       end
@@ -557,7 +560,7 @@ module Rlang::Parser
             wn_casgn = @wgenerator.casgn(wnode, const)
             wn_exp = parse_node(exp_node, wn_casgn)
             @wgenerator.cast(wn_exp, const.wtype, false)
-            logger.warning "Already initialized constant #{const.name}"
+            logger.warn "Already initialized constant #{const.name}"
           end
         else
           rlse node, "Constant #{const_path} not declared before" unless const
@@ -897,12 +900,11 @@ module Rlang::Parser
       return wn_false
     end
 
-    # Whenever a string literal is used in Rlang
-    # in whatever scope (root, class or method scope)
-    # the string literal must be allocated
-    # statically.
-    # Then if the literal is used in a method scope
-    # we must instantiate a dynamic string object
+    # When a string literal initializer is used
+    # in root or class scope,  the string literal is
+    # allocated statically.
+    # If the initializer is used in a method scope
+    # we instantiate a dynamic string object
     # and copy the initial static value in it
     def parse_string(node, wnode, keep_eval)
       string = node.children.last
@@ -918,6 +920,45 @@ module Rlang::Parser
 
       logger.debug "wn_string:#{wn_string} wtype:#{wn_string.wtype} keep_eval:#{keep_eval}"
       return wn_string
+    end
+
+    # Example
+    # [1, -2, 5]
+    # -------
+    # (array
+    #   (int 1)
+    #   (int -2)
+    #   (int 5)
+    # )
+    #
+    # When an array literal initializer is used
+    # in root or class scope, the array literal is
+    # allocated statically.
+    # If the initializer is used in a method scope
+    # we instantiate a dynamic string object
+    # and copy the initial static value in it
+    #
+    def parse_array(node, wnode, keep_eval)
+      # check that all array elements are of type int 
+      # this is the only initializer type we support for
+      # now. Collect int values.
+      array = node.children.collect do |wn|
+        rlse node,  "Array initializer can only be of type int (got #{wn}" unless wn.type == :int
+        wn.children.last
+      end
+
+      if wnode.in_method_scope?
+        # allocate array dynamically
+        wn_array = @wgenerator.array_dynamic_new(wnode, array)
+      else
+        # allocate array statically
+        wn_array = @wgenerator.array_static_new(wnode, array)
+      end
+      # Drop last evaluated result if asked to
+      @wgenerator.drop(wnode) unless keep_eval
+
+      logger.debug "wn_array:#{wn_array} wtype:#{wn_array.wtype} keep_eval:#{keep_eval}"
+      return wn_array
     end
 
     # Example

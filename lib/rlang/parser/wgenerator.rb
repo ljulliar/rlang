@@ -104,6 +104,11 @@ module Rlang::Parser
     String.new(%{ptr}, %{length})
   }
 
+  # Dynamically allocate a string object
+  ARRAY_NEW_TMPL = %q{
+    Array%{elt_size_in_bits}.new(%{ptr}, %{length})
+  }
+
   # Generate the wasm nodes and tree structure
   # ***IMPORTANT NOTE***
   # Unless otherwise stated all methods receive
@@ -315,7 +320,7 @@ module Rlang::Parser
         wns = WNode.new(:insn, wnc)
         wns.wtype = WType::DEFAULT 
         wns.c(:class_size, func_name: size_method.wasm_name, 
-              wtype: wns.wasm_type, size: wnc.class_size)
+              wasm_type: wns.wasm_type, size: wnc.class_size)
         size_method.wnode = wns
       end
     end
@@ -325,7 +330,7 @@ module Rlang::Parser
       wnc = wnode.class_wnode
       wn_set = WNode.new(:insn, wnc, true)
       wn_set.c(:attr_setter, func_name: attr.setter.wasm_name, 
-            attr_name: attr.wasm_name, wtype: attr.wasm_type,
+            attr_name: attr.wasm_name, wasm_type: attr.wasm_type,
             offset: attr.offset)
       wn_set
     end
@@ -335,8 +340,7 @@ module Rlang::Parser
       wnc = wnode.class_wnode
       wn_get = WNode.new(:insn, wnc, true)
       wn_get.c(:attr_getter, func_name: attr.getter.wasm_name, 
-            attr_name: attr.wasm_name, wtype: attr.wasm_type,
-            offset: attr.offset)
+            wasm_type: attr.wasm_type, offset: attr.offset)
       wn_get
     end
 
@@ -389,7 +393,7 @@ module Rlang::Parser
         logger.debug("Prepending param #{marg}")
         wn = WNode.new(:insn, wnm, true)
         wn.wtype = marg.wtype
-        wn.c(:param, name: marg.wasm_name)
+        wn.c(:param, name: marg.wasm_name, wasm_type: wn.wasm_type)
       end
     end
 
@@ -397,7 +401,7 @@ module Rlang::Parser
       unless wnode.wtype.blank?
         wn = WNode.new(:insn, wnode, true)
         wn.wtype = wnode.wtype
-        wn.c(:result)      
+        wn.c(:result, wasm_type: wn.wasm_type)      
       end
     end
 
@@ -407,7 +411,7 @@ module Rlang::Parser
         logger.debug("Prepending local #{lvar.inspect}")
         wn = WNode.new(:insn, wnm, true)
         wn.wtype = lvar.wtype
-        wn.c(:local, name: lvar.wasm_name)
+        wn.c(:local, name: lvar.wasm_name, wasm_type: wn.wasm_type)
       end
     end
 
@@ -421,7 +425,7 @@ module Rlang::Parser
     # Set constant
     def casgn(wnode, const)
       (wn = WNode.new(:insn, wnode)).wtype = const.wtype
-      wn.c(:store, wtype: const.wtype)
+      wn.c(:store, wasm_type: const.wtype)
       WNode.new(:insn, wn).c(:addr, value: const.address)
       wn
     end
@@ -429,7 +433,7 @@ module Rlang::Parser
     # Get constant
     def const(wnode, const)
       (wn = WNode.new(:insn, wnode)).wtype = const.wtype
-      wn.c(:load, wtype: const.wtype, var_name: const.wasm_name)
+      wn.c(:load, wasm_type: const.wasm_type)
       WNode.new(:insn, wn).c(:addr, value: const.address)
       wn
     end
@@ -476,7 +480,7 @@ module Rlang::Parser
     # Set instance variable
     def ivasgn(wnode, ivar)
       (wn = WNode.new(:insn, wnode)).wtype = ivar.wtype
-      wn.c(:store_offset, wtype: ivar.wasm_type, offset: lambda { ivar.offset })
+      wn.c(:store_offset, wasm_type: ivar.wasm_type, offset: lambda { ivar.offset })
       self._self_(wn)
       wn
     end
@@ -484,7 +488,7 @@ module Rlang::Parser
     # Get instance variable. 
     def ivar(wnode, ivar)
       (wn = WNode.new(:insn, wnode)).wtype = ivar.wtype
-      wn.c(:load_offset, wtype: ivar.wasm_type, offset: lambda { ivar.offset })
+      wn.c(:load_offset, wasm_type: ivar.wasm_type, offset: lambda { ivar.offset })
       self._self_(wn)
       wn
     end
@@ -494,7 +498,7 @@ module Rlang::Parser
     # an empty expression node to populate later
     def cvasgn(wnode, cvar)
       (wn = WNode.new(:insn, wnode)).wtype = cvar.wtype
-      wn.c(:store, wtype: cvar.wtype)
+      wn.c(:store, wasm_type: cvar.wasm_type)
       WNode.new(:insn, wn).c(:addr, value: cvar.address)
       wn
     end
@@ -502,7 +506,7 @@ module Rlang::Parser
     # Get class variable
     def cvar(wnode, cvar)
       (wn = WNode.new(:insn, wnode)).wtype = cvar.wtype
-      wn.c(:load, wtype: cvar.wtype, var_name: cvar.wasm_name)
+      wn.c(:load, wasm_type: cvar.wasm_type)
       WNode.new(:insn, wn).c(:addr, value: cvar.address)
       wn
     end
@@ -518,14 +522,14 @@ module Rlang::Parser
     # Create the local variable storage node 
     def lvasgn(wnode, lvar)
       (wn = WNode.new(:insn, wnode)).wtype = lvar.wtype
-      wn.c(:local_set, wtype: lvar.wtype, var_name: lvar.wasm_name)
+      wn.c(:local_set, var_name: lvar.wasm_name)
       wn
     end
 
     # Read local variable
     def lvar(wnode, lvar)
       (wn = WNode.new(:insn, wnode)).wtype = lvar.wtype
-      wn.c(:local_get, wtype: lvar.wtype, var_name: lvar.wasm_name)
+      wn.c(:local_get, var_name: lvar.wasm_name)
       wn
     end
 
@@ -542,13 +546,13 @@ module Rlang::Parser
 
     def int(wnode, wtype, value)
       (wn = WNode.new(:insn, wnode)).wtype = wtype
-      wn.c(:const, wtype: wtype, value: value)
+      wn.c(:const, wasm_type: wn.wasm_type, value: value)
       wn
     end
 
     def float(wnode, wtype, value)
       (wn = WNode.new(:insn, wnode)).wtype = wtype
-      wn.c(:const, wtype: wtype, value: value)
+      wn.c(:const, wasm_type: wn.wasm_type, value: value)
       wn
     end
 
@@ -559,24 +563,25 @@ module Rlang::Parser
       WNode.new(type, wnode)
     end
 
-    # Static string allocation
-    def string_static(string, data_label)
-      # Allocate string itself and the attributes
-      # of String object pointing to that string
-      data_stg = DAta.append(data_label.to_sym, string)
-      data_stg
+    # Static string data allocation
+    def allocate_string_static_data(string, data_label)
+      # if string is empty do not allocate any memory space
+      DAta.append(data_label.to_sym, string) unless string.empty?
     end
 
     # Static new string object
     def string_static_new(wnode, string)
       klass = wnode.find_current_class_or_module()
       data_label = "#{klass.name}_string_#{@static_count += 1}"
-      # Statically 
-      data_stg = self.string_static(string, data_label)
+      # Allocate string data statically
+      # Note : data_stg is nil if string is empty
+      data_stg = self.allocate_string_static_data(string, data_label)
       # align on :I32 boundary
+      # then allocate the String object attributes
+      # and set them up
       DAta.align(4)
       data_len = DAta.append("#{data_label}_len".to_sym, string.length, WType::DEFAULT)
-      data_ptr = DAta.append("#{data_label}_ptr".to_sym, data_stg.address, WType::DEFAULT)
+      data_ptr = DAta.append("#{data_label}_ptr".to_sym, data_stg ? data_stg.address : 0, WType::DEFAULT)
       # Generate address wnode
       (wn_object_addr = WNode.new(:insn, wnode)).c(:addr, value: data_len.address)
       wn_object_addr.wtype = WType.new(:String)
@@ -587,14 +592,58 @@ module Rlang::Parser
     def string_dynamic_new(wnode, string)
       klass = wnode.find_current_class_or_module()
       data_label = "#{klass.name}_string_#{@static_count += 1}"
-      data_stg = self.string_static(string, data_label)
+      # Note : data_stg is nil if string is empty
+      data_stg = self.allocate_string_static_data(string, data_label)
       string_new_source = STRING_NEW_TMPL % {
-        ptr: data_stg.address,
+        ptr: data_stg ? data_stg.address : 0,
         length: string.length
       }
       #puts string_new_source;exit
-      wn_string = self.parser.parse(string_new_source, wnode)
-      #puts wn_string; exit
+      self.parser.parse(string_new_source, wnode)
+    end
+
+    # Static array data allocation
+    def allocate_array_static_data(array, data_label)
+      # Append each array element to the same data section
+      label = data_label.to_sym
+      data_arr = nil
+      # Do not allocate memory space if array is empty
+      array.each { |elt| data_arr = DAta.append(label, elt) }
+      data_arr
+    end
+
+    # Static new array object
+    def array_static_new(wnode, array)
+      klass = wnode.find_current_class_or_module()
+      data_label = "#{klass.name}_array_#{@static_count += 1}"
+      # Allocate array data statically
+      # Note : data_arr is nil if string is empty
+      data_arr = self.allocate_array_static_data(array, data_label)
+      # align on :I32 boundary
+      # then allocate the Array object attributes
+      # and set them up
+      DAta.align(4)
+      data_count = DAta.append("#{data_label}_count".to_sym, array.length, WType::DEFAULT)
+      data_ptr   = DAta.append("#{data_label}_ptr".to_sym, data_arr ? data_arr.address : 0, WType::DEFAULT)
+      # Generate address wnode
+      (wn_object_addr = WNode.new(:insn, wnode)).c(:addr, value: data_count.address)
+      wn_object_addr.wtype = WType.new(:Array32)
+      wn_object_addr
+    end
+
+    # Dynamic new array object
+    def array_dynamic_new(wnode, array)
+      klass = wnode.find_current_class_or_module()
+      data_label = "#{klass.name}_array_#{@static_count += 1}"
+      # Note : data_arr is nil if string is empty
+      data_arr = self.allocate_array_static_data(array, data_label)
+      array_new_source = ARRAY_NEW_TMPL % {
+        elt_size_in_bits: WTYPE::DEFAULT.size * 8,
+        ptr: data_arr ? data_arr.address : 0,
+        count: array.length
+      }
+      #puts array_new_source;exit
+      self.parser.parse(array_new_source, wnode)
     end
 
     # All the cast_xxxx methods below returns
@@ -614,7 +663,7 @@ module Rlang::Parser
       else
         wn_cast_op = wnode.insert(:insn)
         wn_cast_op.wtype = wtype
-        wn_cast_op.c(signed ? :extend_i32_s : :extend_i32_u , wtype: wtype)
+        wn_cast_op.c(signed ? :extend_i32_s : :extend_i32_u , wasm_type: wn_cast_op.wasm_type)
       end
       wn_cast_op
     end
@@ -638,7 +687,7 @@ module Rlang::Parser
       else
         wn_cast_op = wnode.insert(:insn)
         wn_cast_op.wtype = wtype
-        wn_cast_op.c(:wrap_i64, wtype: wtype)
+        wn_cast_op.c(:wrap_i64, wasm_type: wn_cast_op.wasm_type)
       end
       wn_cast_op
     end
@@ -676,11 +725,11 @@ module Rlang::Parser
     # operands below)
     def native_operator(wnode, operator, wtype=WType.new(:none))
       if (op = ALL_OPS_MAP[operator])
-        (wn_op = WNode.new(:insn, wnode)).c(:operator, operator: op)
-        wn_op.wtype = wtype
+        (wn_op = WNode.new(:insn, wnode)).wtype = wtype
+        wn_op.c(:operator, wasm_type: wn_op.wasm_type, operator: op)
         logger.debug "Creating operator #{operator} wnode: #{wn_op}"
         # special case for - unary operator transformed into (0 - x)
-        WNode.new(:insn, wn_op).c(:const, value: 0) if operator == :-@
+        WNode.new(:insn, wn_op).c(:const, wasm_type: wn_op.wasm_type, value: 0) if operator == :-@
         wn_op
       else
         raise "operator '#{operator}' not supported"
@@ -725,7 +774,8 @@ module Rlang::Parser
           unless legal_ops.include?(op)
         # if + or - operator then multiply arg by size of object
         if [:add, :sub].include? wnode_op.wargs[:operator]
-          (wn_mulop = WNode.new(:insn, wnode_op)).c(:operator, operator: :mul)
+          (wn_mulop = WNode.new(:insn, wnode_op)).wtype = WType::DEFAULT
+          wn_mulop.c(:operator, wasm_type: wn_mulop.wasm_type, operator: :mul)
           WNode.new(:insn, wn_mulop).c(:call, func_name: "$#{wnode_recv.wtype.name}::#{SIZE_METHOD}")
           wnode_args.first.reparent_to(wn_mulop)
         else
@@ -804,14 +854,35 @@ module Rlang::Parser
     # generate code for method call
     def send_method(wnode, class_path, method_name, method_type)
       logger.debug "In call generator for #{class_path}::#{method_name}"
-      k = wnode.find_class_or_module(class_path)
-      if k && (method = wnode.find_method(k, method_name, method_type))
-        logger.debug "Found method #{method.name} in class #{method.klass.name}"
-        (wn_call = WNode.new(:insn, wnode)).c(:call, func_name: method.wasm_name)
-        wn_call.wtype = method.wtype
-        wn_call
+      if k = wnode.find_class_or_module(class_path)
+        method = wnode.find_method(k, method_name, method_type)
+        if k.wtype.native? && ALL_OPS_MAP.has_key?(method_name)
+          # An Rlang method exist for this class but methods corresponding to 
+          # Webassembly native operators applied to native Webassembly types
+          # (I32, I64, F32, F64) **cannot** be overriden by instance methods
+          # in Rlang code
+          if method
+            logger.warn "Rlang #{class_path}::#{method_name} method ignored. Native operator has precedence"
+          end
+          logger.debug "Apply native operator #{method_name} to native wtype  #{class_path}"
+          wn_call = self.native_operator(wnode, method_name, WType.new(class_path))
+        elsif !k.wtype.native? && ALL_OPS_MAP.has_key?(method_name) && method.nil?
+          # Similarly if the Class is not a native type (a regular class)
+          # and the Class doesn't provide its own method implementation of the native
+          # operator then apply the native operands
+          logger.debug "Apply native operator #{method_name} to class found : #{class_path}"
+          wn_call = self.native_operator(wnode, method_name, WType.new(class_path))
+        elsif method
+          logger.debug "Found method #{method.name} in class #{method.klass.name}"
+          (wn_call = WNode.new(:insn, wnode)).c(:call, func_name: method.wasm_name)
+          wn_call.wtype = method.wtype
+          wn_call
+        else
+          raise "Unknown method '#{method_name}' in class #{class_path}"
+        end
       elsif ALL_OPS_MAP.has_key? method_name
-        # it's a native Wasm operator
+        # It is a native Wasm operator
+        logger.debug "Native operator found : #{class_path}::#{method_name}"
         wn_call = self.native_operator(wnode, method_name, WType.new(class_path))
       else
         raise "Unknown method '#{method_name}' in class #{class_path}"
@@ -848,8 +919,8 @@ module Rlang::Parser
     end
 
     def while(wnode)
-      (wnb = WNode.new(:insn, wnode)).c(:block) 
-      (wnl = WNode.new(:insn, wnb)).c(:loop) 
+      (wnb = WNode.new(:insn, wnode)).c(:block, label: wnb.set_label) 
+      (wnl = WNode.new(:insn, wnb)).c(:loop, label: wnl.set_label) 
       (wnbi = WNode.new(:insn, wnl)).c(:br_if, label: wnb.label)
       return wnb,wnbi,wnl
     end
@@ -859,7 +930,7 @@ module Rlang::Parser
     # negate the original while condition
     def while_cond(wnode, wnode_cond_exp)
       wn_eqz = WNode.new(:insn, wnode)
-      wn_eqz.c(:eqz, wtype: wnode_cond_exp.wtype)
+      wn_eqz.c(:eqz, wasm_type: wnode_cond_exp.wasm_type)
       wnode_cond_exp.reparent_to(wn_eqz)
       wn_eqz
     end

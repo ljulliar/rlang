@@ -52,6 +52,17 @@ class RlangArrayTest < Minitest::Test
     assert_equal 2220, @instance.exports.send(@wfunc).call
   end
 
+  def test_array32_static_init
+    assert_equal 32385, @instance.exports.send(@wfunc).call
+  end
+
+  def test_array32_size
+    100.times do
+      sz = rand(255)
+      assert_equal 0, @instance.exports.send(@wfunc).call(sz)
+    end
+  end
+
   def test_array32_set
     array_obj_addr = @instance.exports.send(@wfunc).call
     # For the 32bit memory view port divide address by 4
