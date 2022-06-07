@@ -4,8 +4,6 @@
 #
 # Integer 64 methods
 
-class String; end
-
 class I64
   def self.size; 8; end
 end
