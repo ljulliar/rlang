@@ -5,6 +5,7 @@
 require 'test_helper'
 require 'wasmer'
 require_relative '../lib/builder'
+require_relative '../lib/ruby/mirror/rstring.rb'
 
 
 class RlangStringTest < Minitest::Test
@@ -92,11 +93,55 @@ class RlangStringTest < Minitest::Test
       assert_equal stg[idx].ord,mem8[0], "Idx: #{idx}, Expected #{stg[idx].ord} got #{mem8[idx]}"
     end
 
+    # Index 3 again with the Ruby string conversion
+    # this to test the RString mirror class
+    idx = 3
+    stg_obj_addr = @exports.send(@wfunc).call(idx)
+    ruby_stg = RString.new(@instance, stg_obj_addr)
+    assert_equal stg[idx], ruby_stg, "Idx: #{idx}, Expected\"a\" got #{ruby_stg}"
+
+
     # Index beyond last retuns an empty string
     idx = stg.length
     stg_obj_addr = @exports.send(@wfunc).call(idx)
     stg_length = @exports.string_i_length.call(stg_obj_addr)
     assert_equal 0, stg_length
+  end
+
+  def test_string_index_assign
+    expected_stg = "aZeRT123"
+    stg_obj_addr = @exports.send(@wfunc).call
+    ruby_stg = RString.new(@instance, stg_obj_addr)
+    assert_equal expected_stg, ruby_stg
+  end
+
+  def test_string_index_assign_long_string
+    expected_stg = Array.new(256) {|i| i}.map(&:chr).join('')
+    assert_equal 256, expected_stg.length
+
+    stg_obj_addr = @exports.send(@wfunc).call
+    ruby_stg = RString.new(@instance, stg_obj_addr)
+    assert_equal expected_stg, ruby_stg
+  end
+
+  def test_string_ord_A
+    assert_equal 65, @exports.send(@wfunc).call
+  end
+
+  def test_string_times_init
+    assert_equal ("ABCD" * 35).encode!(Encoding::US_ASCII), RString.new(@instance, @exports.send(@wfunc).call)
+  end
+
+  def test_string_equal
+    assert true, @exports.send(@wfunc).call
+  end
+
+  def test_string_equal_not
+    assert true, @exports.send(@wfunc).call
+  end
+
+  def test_string_equal_not_op
+    assert true, @exports.send(@wfunc).call
   end
 
 end
