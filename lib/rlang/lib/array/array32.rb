@@ -22,7 +22,8 @@ class Array32
     if count == 0
       @ptr = 0
     else
-      @ptr = Object.allocate(count * I32.size)
+      # Memory size is count * 4 bytes
+      @ptr = Object.allocate(count << 2)
     end
     @count = count
   end
