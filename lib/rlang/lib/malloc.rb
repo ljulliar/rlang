@@ -37,7 +37,7 @@ DAta[:dummy_malloc_data] = [0, 0, 0, 0]
 
 class Header
   attr_accessor :ptr, :size
-  attr_type ptr: :Header, size: :I32
+  attr_type ptr: :Header, size: :UI32
 end
     
 class Malloc
@@ -55,7 +55,8 @@ class Malloc
   # malloc: allocate n bytes of memory and return pointer
   # to data block
   def self.malloc(nbytes)
-    local p: :Header, prevp: :Header
+    arg nbytes: :UI32
+    local p: :Header, prevp: :Header, nunits: :UI32
 
     # allocate memory by chunk of units (the unit is
     # the size of a Header object here)
@@ -107,6 +108,7 @@ class Malloc
   
   # morecore: ask system for more memory
   def self.morecore(nu)
+    arg nu: :UI32
     result :Header
     local up: :Header
 
@@ -122,7 +124,7 @@ class Malloc
 
   # Free memory block
   def self.free(ap)
-    arg ap: :I32
+    arg ap: :UI32
     result :none
     local bp: :Header, p: :Header
 
