@@ -55,37 +55,30 @@ class String
     s
   end
 
-  # Only positive indices are supported for now
   def [](idx)
     result :String
     # The condition below should actually return nil
     # to be compliant with the Ruby library but we don't
-    # have nil in Rlang
-    #if (idx >= @length) || (idx < -@length)
-    #  return String.new(0,0)
-    #end
-    #idx = (@length + idx) if idx < 0
-    if (idx >= @length) 
-      return String.new(0,0)
-    end
+    # have nil in Rlang so return an empty string
+    return "" if (idx >= @length) || (idx < -@length)
+    idx = (@length + idx) if idx < 0
     stg = String.new(0,1)
     Memory.copy(@ptr+idx, stg.ptr, 1)
     stg
   end
 
-  # Only positive indices are supported for now
   def []=(idx, stg)
     arg stg: :String
     result :String
-    if (idx >= @length)
+    if (idx >= @length) || (idx < -@length)
       raise "IndexError: index out bound"
-    else
-      i=0
-      tgt_ptr = @ptr+idx
-      while i < stg.length && (idx + i) < @length
-        Memory.copy(stg.ptr+i, tgt_ptr+i, 1)
-        i += 1
-      end
+    end
+    idx = (@length + idx) if idx < 0
+    i=0
+    tgt_ptr = @ptr+idx
+    while i < stg.length && (idx + i) < @length
+      Memory.copy(stg.ptr+i, tgt_ptr+i, 1)
+      i += 1
     end
     stg
   end

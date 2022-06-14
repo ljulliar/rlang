@@ -58,7 +58,7 @@ class RlangArrayTest < Minitest::Test
 
   def test_array32_size
     100.times do
-      sz = rand(255)
+      sz = rand(255) + 1
       assert_equal 0, @instance.exports.send(@wfunc).call(sz)
     end
   end
@@ -85,6 +85,15 @@ class RlangArrayTest < Minitest::Test
 
     0.upto(99) do |idx|
       assert_equal multiplier * idx, @instance.exports.test_c_test_array32_get.call(idx)
+    end
+  end
+
+  def test_array32_get_negative_index
+    multiplier = 5
+    array_obj_addr = @instance.exports.test_c_test_array32_set.call(multiplier)
+
+    1.upto(100) do |idx|
+      assert_equal multiplier * (100-idx), @instance.exports.test_c_test_array32_get.call(idx)
     end
   end
 

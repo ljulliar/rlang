@@ -109,7 +109,7 @@ class RlangStringTest < Minitest::Test
   end
 
   def test_string_index_assign
-    expected_stg = "aZeRT123"
+    expected_stg = "AZeRT123"
     stg_obj_addr = @exports.send(@wfunc).call
     ruby_stg = RString.new(@instance, stg_obj_addr)
     assert_equal expected_stg, ruby_stg

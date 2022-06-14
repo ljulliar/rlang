@@ -28,13 +28,14 @@ class Array32
     @count = count
   end
 
-  def size; @count; end
+  def size;   @count; end
   def length; @count; end
   def empty?; @count == 0; end
 
   def [](idx)
     result :I32
-    raise "Index out of bound" if idx >= @count
+    raise "Index out of bound" if idx >= @count || idx < -@count
+    idx = @count + idx if idx <0
     # offset in memory for elt #idx is idx * 4
     Memory.load32(@ptr + (idx << 2))
   end
@@ -42,7 +43,8 @@ class Array32
   def []=(idx, value)
     arg value: :I32
     result :I32
-    raise "Index out of bound" if idx >= @count
+    raise "Index out of bound" if idx >= @count || idx < -@count
+    idx = @count + idx if idx <0
     # offset in memory for elt #idx is idx * 4
     Memory.store32(@ptr + (idx << 2), value)
     value

@@ -33,7 +33,7 @@ class Array64
 
   def [](idx)
     result :I64
-    raise "Index out of bound" if idx >= @count
+    raise "Index out of bound" if idx >= @count || idx < -@count
     # offset in memory for elt #idx is idx * 8
     Memory.load64(@ptr + (idx << 3))
   end
@@ -41,7 +41,7 @@ class Array64
   def []=(idx, value)
     arg value: :I64
     result :I64
-    raise "Index out of bound" if idx >= @count
+    raise "Index out of bound" if idx >= @count || idx < -@count
     # offset in memory for elt #idx is idx * 8
     Memory.store64(@ptr + (idx << 3), value)
     value
