@@ -1,3 +1,13 @@
+## 0.6.0
+* Support for signed/unsigned integers (arithmetics, relational operatos, explicit and implicit type cast)
+* More methods in String ([], []=, +, *, ==, !=, chr,...)
+* More methods in Array  ([], []=, ==, !=,...)
+* More methods in I32 and I64 classes (to_s,...)
+* Base 64 encoding and decidong module (same methods as in Ruby)
+* Array literal ([]) supported as initializer
+* Automatically adjust HEAP base address at compile time
+* Various bug fixes and code cleanup
+
 ## 0.5.1
 * Imported WASM methods can now be defined
 * Preliminary version of WASI interface and IO class added to Rlang library
