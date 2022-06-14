@@ -18,17 +18,18 @@ class WType
   include Log
 
   WASM_TYPE_MAP = {
-    I64: Type::I64,
-    I32: Type::I32,
-    F64: Type::F64,
-    F32: Type::F32
+    UI64: Type::UI64,
+    I64:  Type::I64,
+    UI32: Type::UI32,
+    I32:  Type::I32,
+    F64:  Type::F64,
+    F32:  Type::F32
   }
 
   # Implicit Type cast order in decreasing order of precedence
   # Class types have precedence over default integer type
   # because of pointer arithmetics
-  # TODO: :Class should be inserted before WType::DEFAULT
-  CAST_PRECEDENCE = [:F64, :F32, :I64, :Class, :I32]
+  CAST_PRECEDENCE = [:F64, :F32, :UI64, :I64, :Class, :UI32, :I32]
   
   attr_reader :name
 
@@ -77,6 +78,10 @@ class WType
 
   def native?
     WASM_TYPE_MAP.has_key? @name
+  end
+
+  def signed?
+    self.native? && WASM_TYPE_MAP[@name].signed?
   end
 
   def blank?
@@ -128,6 +133,7 @@ class WType
   end
 
   DEFAULT = self.new(WASM_TYPE_MAP.key(Type::DEFAULT))
+  UNSIGNED_DEFAULT = self.new(WASM_TYPE_MAP.key(Type::UNSIGNED_DEFAULT))
 
 end
 

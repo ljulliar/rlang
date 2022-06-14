@@ -22,26 +22,29 @@ module Rlang::Parser
     :+  => :add,
     :-  => :sub,
     :*  => :mul,
-    :/  => :div_u,
-    :%  => :rem_u,
     :&  => :and,
     :|  => :or,
     :^  => :xor,
-    :>> => :shr_u,
     :<< => :shl
+  }
+
+  ARITHMETIC_SIGNED_OPS_MAP = {
+    :/  => :div_x,
+    :%  => :rem_x,
+    :>> => :shr_x
   }
 
   RELATIONAL_OPS_MAP = {
     :==    => :eq,
     :!=    => :ne,
-    :'<s'  => :lt_s,
-    :<     => :lt_u,
-    :'>s'  => :gt_s,
-    :>     => :gt_u,
-    :'<=s' => :le_s,
-    :<=    => :le_u,
-    :'>=s' => :ge_s,
-    :>=    => :ge_u
+
+  }
+
+  RELATIONAL_SIGNED_OPS_MAP = {
+    :<     => :lt_x,
+    :>     => :gt_x,
+    :<=    => :le_x,
+    :>=    => :ge_x
   }
 
   BOOLEAN_OPS_MAP = {
@@ -54,16 +57,36 @@ module Rlang::Parser
     :'-@'  => :sub  # special case for unary - turned into (sub 0 x)
   }
 
-  ALL_OPS_MAP = [*ARITHMETIC_OPS_MAP, *RELATIONAL_OPS_MAP, *BOOLEAN_OPS_MAP, *UNARY_OPS_MAP].to_h
+  SIGNED_OPS = {
+    signed: {div_x: :div_s, rem_x: :rem_s, shr_x: :shr_s, lt_x: :lt_s, gt_x: :gt_s,
+      le_x: :le_s, ge_x: :ge_s},
+    unsigned: {div_x: :div_u, rem_x: :rem_u, shr_x: :shr_u, lt_x: :lt_u, gt_x: :gt_u,
+        le_x: :le_u, ge_x: :ge_u},
+  }
+
+  # Operators that can be legally used when doing
+  # arithmetic on class instance (= object) pointers
+  # Only unsigned relational operators make sense as pointers
+  # are by nature unsigned integers
+  LEGAL_CLASS_WASM_OPS = [:eq, :ne, :lt_u, :gt_u, :le_u, :ge_u, :add, :sub]
+
+  # All operators with signed / unsigned variants
+  ALL_SIGNED_OPS_MAP = [*ARITHMETIC_SIGNED_OPS_MAP, *RELATIONAL_SIGNED_OPS_MAP].to_h
+
+  # All operators in on hash
+  ALL_OPS_MAP = [*ARITHMETIC_OPS_MAP, *ARITHMETIC_SIGNED_OPS_MAP, *RELATIONAL_OPS_MAP, *RELATIONAL_SIGNED_OPS_MAP,
+                 *BOOLEAN_OPS_MAP, *UNARY_OPS_MAP].to_h
 
   # Matrix of how to cast a WASM type to another
   CAST_OPS = {
-    I32: { I32: :cast_nope, I64: :cast_extend, F32: :cast_notyet, F64: :cast_notyet, Class: :cast_wtype, none: :cast_error},
-    I64: { I32: :cast_wrap, I64: :cast_nope, F32: :cast_notyet, F64: :cast_notyet, Class: :cast_error, none: :cast_error},    
-    F32: { I32: :cast_notyet, I64: :cast_notyet, F32: :cast_nope, F64: :cast_notyet, Class: :cast_error, none: :cast_error},    
-    F64: { I32: :cast_notyet, I64: :cast_notyet, F32: :cast_notyet, F64: :cast_nope, Class: :cast_error, none: :cast_error},    
-    Class: { I32: :cast_wtype, I64: :cast_extend, F32: :cast_error, F64: :cast_error, Class: :cast_wtype, none: :cast_error},
-    none: { I32: :cast_error, I64: :cast_error, F32: :cast_error, F64: :cast_error, Class: :cast_error, none: :cast_error},
+    UI32:  { UI32: :cast_nope,   I32: :cast_wtype,  UI64: :cast_extend, I64: :cast_extend, F32: :cast_notyet, F64: :cast_notyet, Class: :cast_wtype, none: :cast_error},
+    I32:   { UI32: :cast_wtype,  I32: :cast_nope,   UI64: :cast_extend, I64: :cast_extend, F32: :cast_notyet, F64: :cast_notyet, Class: :cast_wtype, none: :cast_error},
+    UI64:  { UI32: :cast_wrap,   I32: :cast_wrap,   UI64: :cast_nope,   I64: :cast_wtype,  F32: :cast_notyet, F64: :cast_notyet, Class: :cast_error, none: :cast_error},    
+    I64:   { UI32: :cast_wrap,   I32: :cast_wrap,   UI64: :cast_wtype,   I64: :cast_nope,   F32: :cast_notyet, F64: :cast_notyet, Class: :cast_error, none: :cast_error},    
+    F32:   { UI32: :cast_notyet, I32: :cast_notyet, UI64: :cast_notyet, I64: :cast_notyet, F32: :cast_nope,   F64: :cast_notyet, Class: :cast_error, none: :cast_error},    
+    F64:   { UI32: :cast_notyet, I32: :cast_notyet, UI64: :cast_notyet, I64: :cast_notyet, F32: :cast_notyet, F64: :cast_nope,   Class: :cast_error, none: :cast_error},    
+    Class: { UI32: :cast_wtype,  I32: :cast_wtype,  UI64: :cast_extend, I64: :cast_extend, F32: :cast_error,  F64: :cast_error,  Class: :cast_wtype, none: :cast_error},
+    none:  { UI32: :cast_error,  I32: :cast_error,  UI64: :cast_error,  I64: :cast_error,  F32: :cast_error,  F64: :cast_error,  Class: :cast_error, none: :cast_error},
   }
 
   # Rlang class size method name
@@ -318,7 +341,7 @@ module Rlang::Parser
       unless size_method.wnode
         logger.debug("Generating #{size_method.klass.name}\##{size_method.name}")
         wns = WNode.new(:insn, wnc)
-        wns.wtype = WType::DEFAULT 
+        wns.wtype = WType::DEFAULT
         wns.c(:class_size, func_name: size_method.wasm_name, 
               wasm_type: wns.wasm_type, size: wnc.class_size)
         size_method.wnode = wns
@@ -646,15 +669,19 @@ module Rlang::Parser
       self.parser.parse(array_new_source, wnode)
     end
 
+    # TYPE CASTING methods
     # All the cast_xxxx methods below returns
     # the new wnode doing the cast operation
     # or the same wnode if there is no additional code
     # for the cast operation
+
+    # No casting. Return node as is.
     def cast_nope(wnode, wtype, signed)
-      # Do nothing
       wnode
     end
 
+    # Cast by extending to a wtype of larger bit size
+    # (e.g. I32 to I64)
     def cast_extend(wnode, wtype, signed)
       if (wnode.template == :const)
         # it's a WASM const, simply change the wtype
@@ -668,10 +695,14 @@ module Rlang::Parser
       wn_cast_op
     end
 
+    # Cast by simply changing the node wtype
+    # No change in native WASM type
+    # (e.g. casting an object pointer to I32)
     def cast_wtype(wnode, wtype, signed)
-      if (wnode.wtype.default? && wtype.class?) || 
-         (wnode.wtype.class? && wtype.default?) ||
-         (wnode.wtype.class? && wtype.class?)
+      # Don't cast blindly. Check that source and target
+      # have the same bit size (e.g. Object pointers, I32, UI32
+      # are the same size, )
+      if wnode.wtype.size == wtype.size
         wnode.wtype = wtype
       else
         cast_error(wnode, wtype, signed)
@@ -679,6 +710,8 @@ module Rlang::Parser
       wnode
     end
 
+    # Cast by wraping a wtype to a smaller size
+    # (e.g. I64 to I32)
     def cast_wrap(wnode, wtype, signed)
       if (wnode.template == :const)
         # it's a WASM const, simply change the wtype
@@ -692,10 +725,12 @@ module Rlang::Parser
       wn_cast_op
     end
 
+    # Cast operation not yet supported
     def cast_notyet(wnode, wtype, signed)
       raise "Type cast from #{wnode.wtype} to #{wtype} not supported yet"
     end
 
+    # Cast operation is invalid
     def cast_error(wnode, wtype, signed)
       raise "Cannot cast type #{wnode.wtype} to #{wtype}. Time to fix your code :-)"
     end
@@ -736,8 +771,9 @@ module Rlang::Parser
       end
     end
 
-    # finish the setting of the operator node and
-    # attach operands
+    # Finish the setting of the operator node, 
+    # attach operands and see if they need implicit
+    # type casting
     def operands(wnode_op, wnode_recv, wnode_args)
       logger.debug "Processing operands in operator wnode: #{wnode_op}..."
       # Do not post process operands if the operator
@@ -755,25 +791,46 @@ module Rlang::Parser
       #wnode_recv = wnode_op.children[0]
       #wnode_args = wnode_op.children[1..-1]
       # First find out the wtype that has precedence
-      wtype = self.class.leading_wtype(wnode_recv, *wnode_args)
+      leading_wtype = self.class.leading_wtype(wnode_recv, *wnode_args)
       
-      wnode_op.wtype = wtype
-      logger.debug "leading type cast: #{wtype}"
+      wnode_op.wtype = leading_wtype
+      logger.debug "leading type cast: #{leading_wtype}"
 
       # Attach receiver and argument to the operator wnode
-      # type casting them if necessary    
-      self.cast(wnode_recv, wtype).reparent_to(wnode_op)
-      self.cast(wnode_args.first, wtype).reparent_to(wnode_op) unless wnode_args.empty?
+      # type casting them if necessary
+      # Note : normally for an operator there is only one argument
+      # but process args as if they were many one day.
+      logger.debug "Perform implicit type casting of receviver and operator arg(s)"
+      self.cast(wnode_recv, leading_wtype).reparent_to(wnode_op)
+      wnode_args.each do |wna|
+        self.cast(wna, leading_wtype).reparent_to(wnode_op)
+      end
+
+      # Once operands casting is done, see if we need the signed or unsigned
+      # version of the native operator
+      # NOTE : At this stage, after the operands casting both of them
+      # should either be signed or unsigned, hence the XNOR sanity check
+      # below
+      if ALL_SIGNED_OPS_MAP.values.include? op
+        if !((signed = wnode_recv.wtype.signed?) ^ (wnode_args.empty? ? true : wnode_args.first.wtype.signed?))
+          wnode_op.wargs[:operator] = SIGNED_OPS[signed ? :signed : :unsigned][op]
+          logger.debug "Receiver has wtype #{wnode_recv.wtype} / Argument has wtype #{wnode_args.first.wtype}"
+          logger.debug "Replacing #{op} operator with #{wnode_op.wargs[:operator]}"
+          op = wnode_op.wargs[:operator]
+        else
+          raise "Type mismatch between operands. Receiver is #{wnode_recv.wtype} and argument is #{wnode_args.first.wtype}"
+        end
+      end
 
       # if the receiver is a class object and not
       # a native integer then pointer arithmetic
       # applies (like in C)
       if wnode_recv.wtype.class?
-        legal_ops = RELATIONAL_OPS_MAP.values + [:add, :sub]
-        raise "Only #{legal_ops.join(', ')} operators are supported on objects (got #{op} in #{wnode_op})" \
-          unless legal_ops.include?(op)
-        # if + or - operator then multiply arg by size of object
-        if [:add, :sub].include? wnode_op.wargs[:operator]
+        raise "Only #{LEGAL_CLASS_WASM_OPS.join(', ')} operators are supported on objects (got #{op} in #{wnode_op})" \
+          unless LEGAL_CLASS_WASM_OPS.include?(op)
+        # if :add or :sub operator then multiply arg by size of object
+        # like in C
+        if [:add, :sub].include? op
           (wn_mulop = WNode.new(:insn, wnode_op)).wtype = WType::DEFAULT
           wn_mulop.c(:operator, wasm_type: wn_mulop.wasm_type, operator: :mul)
           WNode.new(:insn, wn_mulop).c(:call, func_name: "$#{wnode_recv.wtype.name}::#{SIZE_METHOD}")

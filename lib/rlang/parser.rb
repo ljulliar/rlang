@@ -1286,7 +1286,7 @@ module Rlang::Parser
       # Example
       # (expression).cast_to(class_name, argument)    
       # -----
-      # s(:begin,
+      # s(:send,
       #    s(expression),
       #    :cast_to, s(sym, :Class_name))
       # the signed argument true|false is optional and 
@@ -1309,26 +1309,23 @@ module Rlang::Parser
       end
 
 
-      # Type cast directives specific for native types
-      # can pass the signed argument wheres cast_to cannot
-      # this must be processed at compile time. It's not dynamic
+      # Explicit type cast directives for native types.
+      # Used at compile time
+      #
       # Example
-      # (recv).to_Ixx(true|fasle) where xx is 64 or 32
+      # (recv).to_xxxx where xxxx can be [U]I[32|64]
       # -----
-      # s(:begin,
+      # s(:send,
       #    s(expression),
-      #    :to_I64, [true|false])
-      # the signed argument true|false is optional and 
-      # it defaults to false
-      if method_name == :to_I64 || method_name == :to_I32
-        tgt_wtype = (method_name == :to_I64) ? WType.new(:I64) : WType.new(:I32)
-        if (cnt = node.children.count) == 3
-          signed = true if node.children.last.type == :true
-        elsif cnt == 2
-          signed = false
-        else
-          rlse node, "cast directive should have 0 or 1 argument (got #{cnt - 2})"
+      #    :to_I64)
+      #
+      if [:to_UI64, :to_I64, :to_UI32, :to_I32].include? method_name
+        if (cnt = node.children.count) > 2
+          rlse node, "cast directive should have no argument (got #{cnt - 2})"
         end
+        tgt_rlang_type = method_name.to_s.scan(/to_(.+)$/).first.first
+        tgt_wtype = WType.new(tgt_rlang_type)
+        signed = tgt_wtype.signed?
         logger.debug "in cast section: child count #{cnt}, tgt_wtype #{tgt_wtype}, signed: #{signed}"
 
         # Parse the expression and cast it
@@ -1980,28 +1977,28 @@ module Rlang::Parser
       logger.debug "Parsing instance method call #{method_name}, keep_eval: #{keep_eval}..."
       logger.debug "... on receiver #{recv_node}..."
 
-      # parse the receiver node just to know its wtype
-      # if nil it means self
+      # parse the receiver node just to determine its wtype
+      # if receiver node is nil it means the receiver is self
       wn_phony = @wgenerator.phony(wnode)
-
       wn_recv = recv_node.nil? ? parse_self(recv_node, wn_phony) : parse_node(recv_node, wn_phony)
       logger.debug "Parsed receiver : #{wn_recv} / wtype: #{wn_recv.wtype}"
 
-      # Invoke method call
+      # Generate method call code
       wn_op = @wgenerator.send_method(wnode, wn_recv.wtype.class_path, method_name, :instance)
 
       # reparent the receiver wnode(s) to operator wnode
       wn_phony.reparent_children_to(wn_op)
       wnode.remove_child(wn_phony)
 
-      # Grab all arguments and add them as child of the call node
+      # Grab all argument nodes, parse them and add them as child 
+      # to the method call node
       arg_nodes = node.children[2..-1]
       wn_args = arg_nodes.collect do |n| 
         logger.debug "...with arg #{n}"
         parse_node(n, wn_op, true)
       end
 
-      # now cast operands (will do nothing if it's a method call)
+      # now process operands (e.g. cast them if needed)
       @wgenerator.operands(wn_op, wn_recv, wn_args)
       logger.debug "After operands, call wnode: #{wn_op} wtype: #{wn_op.wtype}, wn_op children types: #{wn_op.children.map(&:wtype)}"
 

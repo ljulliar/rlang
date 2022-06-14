@@ -2,6 +2,18 @@ module Type
 
   class I64 < Numeric
     MAX = 2**64 - 1
+    MIN = 0
+    def self.signed?; true; end
+    def size; 8; end  # size in bytes
+    def self.size; 8; end # size in bytes
+    def wasm_type; 'i64'; end
+    def self.wasm_type; 'i64'; end
+  end
+
+  class UI64 < Numeric
+    MAX = 2**63 - 1
+    MIN = -2**63
+    def self.signed?; false; end
     def size; 8; end  # size in bytes
     def self.size; 8; end # size in bytes
     def wasm_type; 'i64'; end
@@ -9,9 +21,23 @@ module Type
   end
 
   class I32 < Numeric
-    MAX = 2**64 - 1
+    MAX = 2**31 - 1
+    MIN = -2**31
     def initialize(v); @v = Integer(v); end
     def +(v); I32.new(v + @v); end
+    def self.signed?; true; end
+    def size; 4; end # size in bytes
+    def self.size; 4; end # size in bytes
+    def wasm_type; 'i32'; end
+    def self.wasm_type; 'i32'; end
+  end
+
+  class UI32 < Numeric
+    MAX = 2**32 - 1
+    MIN = 0
+    def initialize(v); @v = Integer(v); end
+    def +(v); I32.new(v + @v); end
+    def self.signed?; false; end
     def size; 4; end # size in bytes
     def self.size; 4; end # size in bytes
     def wasm_type; 'i32'; end
@@ -20,6 +46,7 @@ module Type
 
   class F64 < Numeric
     MAX = 1.7976931348623158E308
+    def self.signed?; true; end
     def size; 8; end # size in bytes
     def wasm_type; 'f64'; end
     def self.size; 8; end # size in bytes
@@ -29,6 +56,7 @@ module Type
   class F32 < Numeric
     MAX = 3.4028235E38
     # size in bytes
+    def self.signed?; true; end
     def size; 4; end  
     def wasm_type; 'f32'; end
     def self.size; 4; end  
@@ -60,5 +88,6 @@ module Type
   end
 
   DEFAULT = Type::I32
+  UNSIGNED_DEFAULT = Type::UI32
 
 end

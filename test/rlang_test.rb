@@ -141,6 +141,10 @@ class RlangTest < Minitest::Test
     assert_equal 5, @instance.exports.send(@wfunc).call
   end
 
+  def test_cast_implicit_i32_to_i64
+    assert_equal 2147483658, @instance.exports.send(@wfunc).call
+  end
+
   def test_cast_i32_to_i64
     assert_equal 5, @instance.exports.send(@wfunc).call
   end
@@ -419,18 +423,7 @@ class RlangTest < Minitest::Test
   end
 
   def test_operator_relational
-    assert_equal 1, @instance.exports.test_c_test_binary_eq.call(10, 10)
-    assert_equal 0, @instance.exports.test_c_test_binary_eq.call(10, 11)
-    assert_equal 1, @instance.exports.test_c_test_binary_ne.call(10, 11)
-    assert_equal 0, @instance.exports.test_c_test_binary_ne.call(10, 10)
-    assert_equal 0, @instance.exports.test_c_test_binary_lt_u.call(90, 10)
-    assert_equal 1, @instance.exports.test_c_test_binary_lt_u.call(10, 90)
-    assert_equal 1, @instance.exports.test_c_test_binary_gt_u.call(90, 10)
-    assert_equal 0, @instance.exports.test_c_test_binary_gt_u.call(10, 90)
-    assert_equal 0, @instance.exports.test_c_test_binary_le_u.call(90, 10)
-    assert_equal 1, @instance.exports.test_c_test_binary_le_u.call(10, 10)
-    assert_equal 1, @instance.exports.test_c_test_binary_ge_u.call(90, 4)
-    assert_equal 0, @instance.exports.test_c_test_binary_ge_u.call(2, 90)
+    assert_equal 0, @instance.exports.send(@wfunc).call
   end
 
   def test_operator_unary

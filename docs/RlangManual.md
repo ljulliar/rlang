@@ -118,7 +118,7 @@ end
 The code is pretty straightforward: a new square instance is created, its side attribute is set to 10. As you would expect, the call to the Square#area method returns 100 and the perimeter is 40.
 
 ### Class attribute type
-In the example above the `side` attribute is implicitely using the `:I32` (long integer) WebAssembly type. It's the default Rlang type. Assuming you want to manage big squares, you'd have to use `:I64` (double integer) like this for the `side` attribute and also instruct Rlang that the return value of area is also `:I64` (more on this later).
+In the example above the `side` attribute is implicitely using the `:I32` (signed 32-bit integer) WebAssembly type. It's the default Rlang type. Assuming you want to manage big squares, you'd have to use `:I64` (double integer) like this for the `side` attribute and also instruct Rlang that the return value of area is also `:I64` (more on this later).
 
 ```ruby
 class Square
@@ -230,9 +230,9 @@ Rlang also gives you the ability to declare the return type of a method like thi
 result :class_name, :method_name, :your_type_here
 ```
 
-This result directive must be used to instruct the compiler about the return type of a method if it has not seen it yet (e.g. the method definition is coming later in your source code) or when calling a method from another class defined in a different file not yet compiled. But keep in mind that this is only needed if the method returns something different than the default type (`:I32`).
+This result directive must be used to instruct the compiler about the return type of a method if the compiler has not yet compiled this method (e.g. the method definition is coming later in your source code) or when calling a method from another class defined in a different file not yet compiled. Keep in mind that this is only needed if the method returns something different than the default type (`:I32`).
 
-Note: in this directive `:method_name` symbol starts with a `#` characters if it refers to an instance method. Without it it refers to a class method.
+Note: in this directive `:method_name` symbol starts with a `#` characters if it refers to an instance method. Without the `#` it refers to a class method.
 
 For an example see the [test_def_result_type_declaration.rb](https://github.com/ljulliar/rlang/blob/master/test/rlang_test_files/test_def_result_type_declaration.rb), a Rlang file that is part of the Rlang test suite.
 
@@ -295,10 +295,10 @@ The example above is taken from the Rlang WASI class that defines the interface 
 
 
 ## Rlang types
-The types currently supported by Rlang are integers either long (`:I32`) or double (`:I64`) or a class type. Float types (`:F32`, `:F64`) may follow in a future version. By default Rlang assumes that any integer literal, variable, argument,... is of type `:I32`. If you need it to be of a different type you must state it explicitely in the method body (see above).
+The types currently supported by Rlang are integers either signed long (`:I32`), unsigned long (`:UI32`), signed double (`:I64`), unsigned double (`:UI64`) or a class type. Float types (`:F32`, `:F64`) may follow in a future version. By default Rlang assumes that any integer literal, variable, argument,... is of type `:I32`. If you need it to be of a different type you must declare it explicitely in the method body (see above) or cast it explicitely (see below).
 
 ### Implicit type cast
-Only in rare cases will you use the `local` directive in methods as Rlang does its best to infer the type of a variable from its first assigned value. As an example, in the code below, the fact that `arg1` is known to be an `:I64` type of argument is enough to auto-magically create lvar as in `:I64` local variable too.
+Only in rare cases will you use the `local` directive in methods as Rlang does its best to infer the type of a variable from its first assigned value. As an example, in the code below, the fact that `arg1` is known to be an `:I64` type of argument is enough to auto-magically create lvar as an `:I64` local variable too.
 
 ```ruby
 def m_local_var(arg1)
@@ -308,7 +308,7 @@ def m_local_var(arg1)
 end
 ```
 
-Conversely in the method below the first statement `lvar = 10` auto-vivifies `lvar` as a variable of type `:I32` (the default Rlang type). On the next line, Rlang evaluates `arg1 * 100` as an `:I64` result because `arg1` is declared as being of type `:I64`. Similarly as the type of `lvar` local variable was auto-vivified as `:I32`, the result of the expression `arg1 * 100` will be type cast from `:I64` to `:I32`. Note that Such a type cast may of course result in the value being truncated and the Rlang compiler will emit a warning accordingly.
+Conversely in the method below the first statement `lvar = 10` auto-vivifies `lvar` as a variable of type `:I32` (the default Rlang type). On the next line, Rlang evaluates `arg1 * 100` as an `:I64` result because `arg1` is declared as being of type `:I64`. Similarly as the type of `lvar` local variable was auto-vivified as `:I32`, the result of the expression `arg1 * 100` will be type cast from `:I64` to `:I32`. Note that such a type cast may of course result in the value being truncated and the Rlang compiler will emit a warning accordingly.
 
 ```ruby
 def self.m_local_var(arg1)
@@ -318,6 +318,33 @@ def self.m_local_var(arg1)
   # ....
 end
 ```
+
+### Implicit type cast precedence
+
+Rlang follows the C IEC/ISO Standard to implicitely convert types. When operands of different types are mixed in arithmetic or relational operators, Rlang will conver them according to the following priority order from the highest priority to the lowest:
+
+`:F64`, `:F32`, `:UI64`, `:I64`, `:Class`, `:UI32`, `:I32`
+
+Let's take a few examples:
+* If you use 32 bit floating point numbers and 64 bit floating point numbers in the same expression all `:F32` values will be converted to `:F64`
+* Similarly if you mix `:F32` values and `:I64` values, all 64-bit integers will be converted to 32-bit floating point values before evaluating the expression
+* **IMPORTANT** note that unsigned integers `:UI64` and `:UI32`have a higher priority than their signed counter part `:I64` and `:I32`. This means that when mixing signed and unsigned integer values in the same expression, the signed integers will be reinterpreted as its unsigned equivalent bitwise. As an example in this context an `:I32` with a value of -6 will be reinterpreted as an`:UI32` with a value of 4294967290. So be very cautious when mixing signed and unsigned integers as this may be give somewhat suprising results especially when using relational operators such >, <, >=,...
+
+### Pointer arithmetics
+
+In the types priority order mentioned above, the `:Class` type designate any value pointing to a class instance, in other word an object. This means that object pointers are values that you can process through arithmetic and relational operators like in C. A pointer to an object is a 32 bit memory address that has type casting precedence over `:UI32` and `:I32` types.
+
+Consequently when doing some arithmetics on object pointers like an addition or a substraction the integer vale will be interpreted as a multiple of the object size as if you were moving an index over objects of the same type in memory. Again this behavior is similar to the C language.
+
+
+```ruby
+class MyClass
+  up = Header.new
+  next_hdr = up + 1 
+  #...
+end
+```
+In the example above, a new header object is created and it meory location is stored in the up variable. When adding 1 to the up variable, Rlang knows that up is of type Header and will therefore increase up not by 1 but by the size in byted of the Header Object in memory. You can see examples of pointer arithmetics in the memory allocator of Rlang in lib/malloc.rb.
 
 ### Explicit type cast
 If Rlang is not capable of guessing the proper type of an expression or variable, you can explicitely cast it to any known type. Look at this example:
@@ -335,7 +362,7 @@ The first line will auto-vivify the `@@cvar` class variable as type `:I64`.
 
 The second example turns the value `123876` into a pointer to a `Square` object. It's pretty much like turning an integer into a pointer to a memory address in C.
 
-For `:I32` and `:I64` type cast you can also use the following shortcuts `100.to_I64` or `100.to_I32`
+For type cast a number or an expression to native type you can also use shortcuts like `100.to_I64` or `100.to_UI32`, etc...
 
 Note that type cast can be used anywhere in the code whether in class body or method definition.
 
