@@ -10,8 +10,8 @@ Gem::Specification.new do |spec|
 
   spec.summary       = %q{A (subset of) Ruby to WebAssembly compiler}
   spec.description   = %q{Rlang is meant to create fast and uncluttered WebAssembly code 
-   from the comfort of the Ruby language. It is actually made of two things: a supported 
-   subset of the Ruby language and a compiler transforming this Ruby subset in a valid 
+   from the comfort of a Ruby-like language. It is actually made of two things: the Rlang 
+   language that supports a subset of the Ruby language and a compiler transforming this Ruby subset in a valid 
    and fully runnable WebAssembly module.}
   spec.homepage      = "https://github.com/ljulliar/rlang"
   spec.license       = "MPL-2.0"
@@ -31,7 +31,7 @@ Gem::Specification.new do |spec|
   spec.executables   << "rlang"
   spec.require_paths = ["lib"]
 
-  spec.add_runtime_dependency 'parser'
+  spec.add_runtime_dependency 'parser', "~> 3.1"
 
   spec.add_development_dependency "bundler", "~> 2.0"
   spec.add_development_dependency "rake", "~> 12.0"
