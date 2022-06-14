@@ -140,7 +140,7 @@ module Base64
     # but that's a bonus...)
     sepcnt = 0; i = 0
     while  i < slen
-      sepcnt += 1 if base64_char_map[str[i].ord] == -1
+      sepcnt += 1 if base64_char_map[str[i].ord] < 0
       i += 1
     end
 
@@ -150,11 +150,7 @@ module Base64
 
     # Count padding chars from the end
     pad = 0; i = slen-1
-    while i > 0
-      # TODO : the test below should actually be o <= 0
-      # but we don't support signed arithmetic for now
-      o = base64_char_map[str[i].ord]
-      break if o != 0 && o != -1
+    while i > 0 && base64_char_map[str[i].ord] <= 0
       pad += 1 if str[i] == PAD
       i -= 1
     end
