@@ -40,7 +40,7 @@ $ gem install --local rlang-x.y.z.gem
 To check that the installation went well, run `rlang --help` and see if the help message displays correctly.
 
 ## A Quick example
-An example is always worth a thousand words, so here is a quick one showing you how to compile some Rang code and run it from your browser. Since Chrome, Chromium, Firefox and Safari embed a WebAssembly runtime it is the easiest way to test your compiled Rlang code.
+An example is always worth a thousand words, so here is a quick one showing you how to compile some Rlang code and run it from your browser. Since Chrome, Chromium, Firefox and Safari embed a WebAssembly runtime it is the easiest way to test your compiled Rlang code.
 
 Navigate to the Fibonacci directory in [examples/fib](https://github.com/ljulliar/rlang/blob/master/examples/fib/) and download the three files from this directory: fib.rb, index.html, server.rb. Alternatively you can git clone the repo and go directly in that directory.
 
