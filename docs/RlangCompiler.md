@@ -26,7 +26,7 @@ Usage: rlang [options] rlang_file.rb
     -V, --version                    Displays Rlang version
     -h, --help                       Prints this help
 ```
-* **-I, --load_path DIRECTORY**: this option can be used several time to append several directories to the Rlang path. Please note that the Rlang load path doesn't inherit from the regular Ruby load path
+* **-I, --load_path DIRECTORY**: this option can be used several times to append several directories to the Rlang path. Please note that the Rlang load path doesn't inherit from the regular Ruby load path
 * **-x, --export-all**: systematically export all Web Assembly functions. This option is useful for test and debug purposes as it allows you to call any functions from outside the Web Assembly runtime
 * **-M, --module**: allows to specify a name for the generated WebAssembly module. By default it doesn't have any.
 * **-m, --memory MIN[,MAX]**: size of the WASM memory allocated at run time. The first argument is the initial amount of memory allocated and the second one (optional) is the maximum memory that your WASM module can allocate while running. The unit of both arguments is in number of WASM pages (4 KBytes)
