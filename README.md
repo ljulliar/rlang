@@ -78,24 +78,24 @@ This project was created out of the need to develop a Virtual Machine written in
 
 After a first proof of concept written directly by hand in WebAssembly (WAT source code) it became clear that writing a full fledged VM directly in WebAssembly was going to be tedious, complex and unnecessarily painful.
 
-Sure I could have written this VM in any of the language that can already be compiled directly to WebAssembly (C, C++, Rust, Go,...) but being fond of Ruby since 2000 I decided that I would go for a compiler capable of transforming a subset of the Ruby language directly into WebAssembly with a minimum overhead.
+Sure I could have written this VM in any of the language that can already be compiled directly to WebAssembly (C, C++, Rust, Go,...) but being fond of Ruby since 2000 I decided that I would design a compiler capable of transforming a subset of the Ruby language directly into WebAssembly with a minimum overhead.
 
-So in a nutshell: the goal of Rlang is to let you develop efficient WebAssembly code with a reasonably high level of abstraction while keeping the generated WebAssembly code straightforward,  human readable and slim.
+So in a nutshell: the goal of Rlang is to let you develop efficient WebAssembly code with a reasonably high level of abstraction while keeping the generated WebAssembly code straightforward, human readable and slim.
 
 ## Why the name Rlang?
 Yes I hear you: Rlang is already the name of the R language so why use that name and aren't you introducing some confusion? Well for one I couldn't resist using that name to honor software engineering history (see below) and because, after all, the intersection between the Ruby/WebAssembly community and the R language community focused on data processing and machine learning must be quite small to say the least.
 
-The name **Rlang** itself is  a tribute to [Slang](http://wiki.squeak.org/squeak/slang), a subset of the Smalltalk language that can directly translate to C. It was created in 1995 to bootstrap the development of the virtual machine of Squeak, an open-source Smalltalk programming system. I highly encourage anyone interested in the history and the technology of virtual machines to read both the [Back to the future](http://www.vpri.org/pdf/tr1997001_backto.pdf) article as well as the now legendary [Blue Book](http://stephane.ducasse.free.fr/FreeBooks/BlueBook/Bluebook.pdf) explaining how the Smalltalk-80 Virtual Machine and Language were designed in the 80s. I would actually go as far as saying that you don't really know what (virtual) machines are until you have read this book :-)
+The name **Rlang** itself is a tribute to [Slang](http://wiki.squeak.org/squeak/slang), a subset of the Smalltalk language that can directly translate to C. It was created in 1995 to bootstrap the development of the virtual machine of Squeak, an open-source Smalltalk programming system. I highly encourage anyone interested in the history and the technology of virtual machines to read both the [Back to the future](http://www.vpri.org/pdf/tr1997001_backto.pdf) article as well as the now legendary [Blue Book](http://stephane.ducasse.free.fr/FreeBooks/BlueBook/Bluebook.pdf) explaining how the Smalltalk-80 Virtual Machine and Language were designed in the 80s. I would actually go as far as saying that you don't really know what (virtual) machines are until you have read this book :-)
 
 ## How you can help
 * Test Rlang installation on different platforms (Linux, Mac, Windows) and different Ruby versions (Ruby 2.2 and above)
 * Write some real Rlang application code, compile it and test it.
 * Improve the documentation if you find it unclear or want to enrich it with further examples and tips
-* Growing the Rlang library that is still quite basic. For instance you can write the String class or the Array class,...). Just start with the the most popular methods in those classes.
-* If you feel like digging into the Rlang parser and Wasm code generator you can extend it with the support of Floats for instance
+* Growing the Rlang library that is still quite basic. For instance you can write new methods from the String class or the Array class,...). 
+* If you feel like digging into the Rlang parser and Wasm code generator you can extend the Rlang language itself
 * And of course writing tests for the parts of the code not yet covered is always welcome (running "rake test" also generates code coverage information)
 
 ## Credits
 A big thanks to:
 * [@whitequark](https://github.com/whitequark) for a fantastic [Ruby parser](https://github.com/whitequark/parser)
-* The [Wasmer](https://wasmer.io/) team as well as the author of the [Ruby Wasm extension of Wasmer](https://github.com/wasmerio/ruby-ext-wasm)
+* The [Wasmer](https://wasmer.io/) team as well as the authors of the [Ruby Wasm extension of Wasmer](https://github.com/wasmerio/ruby-ext-wasm)
