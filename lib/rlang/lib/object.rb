@@ -6,7 +6,6 @@
 
 require_relative './malloc'
 require_relative './kernel'
-require_relative './string'
 
 class Object
 
