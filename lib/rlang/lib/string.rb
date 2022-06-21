@@ -1,5 +1,5 @@
-require_relative './malloc'
 require_relative './memory'
+require_relative './object'
 
 class String
   attr_reader :length, :ptr
@@ -23,7 +23,7 @@ class String
       if length == 0
         @ptr = 0
       else
-        @ptr = Malloc.malloc(length)
+        @ptr = Object.allocate(length)
       end
     else
       @ptr = ptr
@@ -31,8 +31,15 @@ class String
     @length = length
   end
 
+  def free
+    result :none
+    Object.free(@ptr)
+    Object.free(self)
+  end
+
   def size; @length; end
   def to_s; self; end
+  
 
   def empty?
     @length == 0
