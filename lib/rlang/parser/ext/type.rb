@@ -7,6 +7,7 @@ module Type
     def size; 8; end  # size in bytes
     def self.size; 8; end # size in bytes
     def wasm_type; 'i64'; end
+    def self.float?; false; end
     def self.wasm_type; 'i64'; end
   end
 
@@ -17,6 +18,7 @@ module Type
     def size; 8; end  # size in bytes
     def self.size; 8; end # size in bytes
     def wasm_type; 'i64'; end
+    def self.float?; false; end
     def self.wasm_type; 'i64'; end
   end
 
@@ -29,6 +31,7 @@ module Type
     def size; 4; end # size in bytes
     def self.size; 4; end # size in bytes
     def wasm_type; 'i32'; end
+    def self.float?; false; end
     def self.wasm_type; 'i32'; end
   end
 
@@ -41,6 +44,7 @@ module Type
     def size; 4; end # size in bytes
     def self.size; 4; end # size in bytes
     def wasm_type; 'i32'; end
+    def self.float?; false; end
     def self.wasm_type; 'i32'; end
   end
 
@@ -50,16 +54,20 @@ module Type
     def size; 8; end # size in bytes
     def wasm_type; 'f64'; end
     def self.size; 8; end # size in bytes
+    def self.float?; true; end
     def self.wasm_type; 'f64'; end
   end
 
   class F32 < Numeric
     MAX = 3.4028235E38
+    MIN = -MAX
+    MIN_POSITIVE = 1.175494351E-38
     # size in bytes
     def self.signed?; true; end
     def size; 4; end  
     def wasm_type; 'f32'; end
     def self.size; 4; end  
+    def self.float?; true; end
     def self.wasm_type; 'f32'; end
   end
 

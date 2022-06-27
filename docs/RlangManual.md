@@ -295,7 +295,12 @@ The example above is taken from the Rlang WASI class that defines the interface 
 
 
 ## Rlang types
-The types currently supported by Rlang are integers either signed long (`:I32`), unsigned long (`:UI32`), signed double (`:I64`), unsigned double (`:UI64`) or a class type. Float types (`:F32`, `:F64`) may follow in a future version. By default Rlang assumes that any integer literal, variable, argument,... is of type `:I32`. If you need it to be of a different type you must declare it explicitely in the method body (see above) or cast it explicitely (see below).
+The types currently supported by Rlang are:
+* integers either signed long (`:I32`), unsigned long (`:UI32`), signed double (`:I64`), unsigned double (`:UI64`)
+* floats single precision (`:F32`) or double precision (`:F64`)
+* Classes defined in the core libraries or in your own code.
+
+Rlang is typed language which means that the type of method argument and local variables must be explicitely declared. If a literal, local variable or argument type is not declared it is auto-vivified as type `:I32`. If you need it to be of a different type you must declare it explicitely in the method body (see above) or cast it explicitely (see below).
 
 ### Implicit type cast
 Only in rare cases will you use the `local` directive in methods as Rlang does its best to infer the type of a variable from its first assigned value. As an example, in the code below, the fact that `arg1` is known to be an `:I64` type of argument is enough to auto-magically create lvar as an `:I64` local variable too.

@@ -83,6 +83,10 @@ class WType
   def signed?
     self.native? && WASM_TYPE_MAP[@name].signed?
   end
+  
+  def float?
+    self.native? && WASM_TYPE_MAP[@name].float?
+  end
 
   def blank?
     @name == :none || @name == :nil
@@ -132,6 +136,13 @@ class WType
     self.to_s
   end
 
+  # Define WType::xxxx constants for native types
+  UI32 = self.new(:UI32)
+  I32  = self.new(:I32)
+  UI64 = self.new(:UI64)
+  I64  = self.new(:I64)
+  F32  = self.new(:F32)
+  F64  = self.new(:F64)
   DEFAULT = self.new(WASM_TYPE_MAP.key(Type::DEFAULT))
   UNSIGNED_DEFAULT = self.new(WASM_TYPE_MAP.key(Type::UNSIGNED_DEFAULT))
 

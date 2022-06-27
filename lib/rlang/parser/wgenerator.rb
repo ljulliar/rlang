@@ -37,7 +37,6 @@ module Rlang::Parser
   RELATIONAL_OPS_MAP = {
     :==    => :eq,
     :!=    => :ne,
-
   }
 
   RELATIONAL_SIGNED_OPS_MAP = {
@@ -62,6 +61,7 @@ module Rlang::Parser
       le_x: :le_s, ge_x: :ge_s},
     unsigned: {div_x: :div_u, rem_x: :rem_u, shr_x: :shr_u, lt_x: :lt_u, gt_x: :gt_u,
         le_x: :le_u, ge_x: :ge_u},
+    nosign: {div_x: :div, lt_x: :lt, gt_x: :gt, le_x: :le, ge_x: :ge},
   }
 
   # Operators that can be legally used when doing
@@ -77,16 +77,16 @@ module Rlang::Parser
   ALL_OPS_MAP = [*ARITHMETIC_OPS_MAP, *ARITHMETIC_SIGNED_OPS_MAP, *RELATIONAL_OPS_MAP, *RELATIONAL_SIGNED_OPS_MAP,
                  *BOOLEAN_OPS_MAP, *UNARY_OPS_MAP].to_h
 
-  # Matrix of how to cast a WASM type to another
+  # Matrix of how to cast a Wtype to another
   CAST_OPS = {
-    UI32:  { UI32: :cast_nope,   I32: :cast_wtype,  UI64: :cast_extend, I64: :cast_extend, F32: :cast_notyet, F64: :cast_notyet, Class: :cast_wtype, none: :cast_error},
-    I32:   { UI32: :cast_wtype,  I32: :cast_nope,   UI64: :cast_extend, I64: :cast_extend, F32: :cast_notyet, F64: :cast_notyet, Class: :cast_wtype, none: :cast_error},
-    UI64:  { UI32: :cast_wrap,   I32: :cast_wrap,   UI64: :cast_nope,   I64: :cast_wtype,  F32: :cast_notyet, F64: :cast_notyet, Class: :cast_error, none: :cast_error},    
-    I64:   { UI32: :cast_wrap,   I32: :cast_wrap,   UI64: :cast_wtype,   I64: :cast_nope,   F32: :cast_notyet, F64: :cast_notyet, Class: :cast_error, none: :cast_error},    
-    F32:   { UI32: :cast_notyet, I32: :cast_notyet, UI64: :cast_notyet, I64: :cast_notyet, F32: :cast_nope,   F64: :cast_notyet, Class: :cast_error, none: :cast_error},    
-    F64:   { UI32: :cast_notyet, I32: :cast_notyet, UI64: :cast_notyet, I64: :cast_notyet, F32: :cast_notyet, F64: :cast_nope,   Class: :cast_error, none: :cast_error},    
-    Class: { UI32: :cast_wtype,  I32: :cast_wtype,  UI64: :cast_extend, I64: :cast_extend, F32: :cast_error,  F64: :cast_error,  Class: :cast_wtype, none: :cast_error},
-    none:  { UI32: :cast_error,  I32: :cast_error,  UI64: :cast_error,  I64: :cast_error,  F32: :cast_error,  F64: :cast_error,  Class: :cast_error, none: :cast_error},
+    UI32:  { UI32: :cast_nope,  I32: :cast_wtype, UI64: :cast_extend, I64: :cast_extend, F32: :cast_convert, F64: :cast_convert, Class: :cast_wtype, none: :cast_error},
+    I32:   { UI32: :cast_wtype, I32: :cast_nope,  UI64: :cast_extend, I64: :cast_extend, F32: :cast_convert, F64: :cast_convert, Class: :cast_wtype, none: :cast_error},
+    UI64:  { UI32: :cast_wrap,  I32: :cast_wrap,  UI64: :cast_nope,   I64: :cast_wtype,  F32: :cast_convert, F64: :cast_convert, Class: :cast_error, none: :cast_error},    
+    I64:   { UI32: :cast_wrap,  I32: :cast_wrap,  UI64: :cast_wtype,  I64: :cast_nope,   F32: :cast_convert, F64: :cast_convert, Class: :cast_error, none: :cast_error},    
+    F32:   { UI32: :cast_trunc, I32: :cast_trunc, UI64: :cast_trunc,  I64: :cast_trunc,  F32: :cast_nope,    F64: :cast_promote, Class: :cast_error, none: :cast_error},    
+    F64:   { UI32: :cast_trunc, I32: :cast_trunc, UI64: :cast_trunc,  I64: :cast_trunc,  F32: :cast_demote,  F64: :cast_nope,    Class: :cast_error, none: :cast_error},    
+    Class: { UI32: :cast_wtype, I32: :cast_wtype, UI64: :cast_extend, I64: :cast_extend, F32: :cast_error,   F64: :cast_error,   Class: :cast_wtype, none: :cast_error},
+    none:  { UI32: :cast_error, I32: :cast_error, UI64: :cast_error,  I64: :cast_error,  F32: :cast_error,   F64: :cast_error,   Class: :cast_error, none: :cast_error},
   }
 
   # Rlang class size method name
@@ -690,7 +690,10 @@ module Rlang::Parser
       else
         wn_cast_op = wnode.insert(:insn)
         wn_cast_op.wtype = wtype
-        wn_cast_op.c(signed ? :extend_i32_s : :extend_i32_u , wasm_type: wn_cast_op.wasm_type)
+        sign = signed ? 's' : 'u'
+        source_type = wnode.wasm_type
+        wasm_type = wn_cast_op.wasm_type
+        wn_cast_op.c(:extend , wasm_type: wasm_type, source_type: source_type, sign: sign)
       end
       wn_cast_op
     end
@@ -721,6 +724,72 @@ module Rlang::Parser
         wn_cast_op = wnode.insert(:insn)
         wn_cast_op.wtype = wtype
         wn_cast_op.c(:wrap_i64, wasm_type: wn_cast_op.wasm_type)
+      end
+      wn_cast_op
+    end
+
+    # Cast by promoting a wtype to a larger size
+    # (e.g. F32 to F64)
+    def cast_promote(wnode, wtype, signed)
+      if (wnode.template == :const)
+        # it's a WASM const, simply change the wtype
+        wnode.wtype = wtype
+        wn_cast_op = wnode
+      else
+        wn_cast_op = wnode.insert(:insn)
+        wn_cast_op.wtype = wtype
+        wn_cast_op.c(:promote, wasm_type: wn_cast_op.wasm_type)
+      end
+      wn_cast_op
+    end
+
+    # Cast by demoting a wtype to a larger size
+    # (e.g. F64 to F32)
+    def cast_demote(wnode, wtype, signed)
+      if (wnode.template == :const)
+        # it's a WASM const, simply change the wtype
+        wnode.wtype = wtype
+        wn_cast_op = wnode
+      else
+        wn_cast_op = wnode.insert(:insn)
+        wn_cast_op.wtype = wtype
+        wn_cast_op.c(:demote, wasm_type: wn_cast_op.wasm_type)
+      end
+      wn_cast_op
+    end
+
+    # Truncate a float wtype to a smaller precision integer type
+    # (e.g. F32 to I32, F64 to I64, ...)
+    def cast_trunc(wnode, wtype, signed)
+      if (wnode.template == :const)
+        # it's a WASM const, simply change the wtype
+        wnode.wtype = wtype
+        wn_cast_op = wnode
+      else
+        wn_cast_op = wnode.insert(:insn)
+        wn_cast_op.wtype = wtype
+        sign = signed ? 's' : 'u'
+        source_type = wnode.wasm_type
+        wasm_type = wn_cast_op.wasm_type
+        wn_cast_op.c(:trunc , wasm_type: wasm_type, source_type: source_type, sign: sign)
+      end
+      wn_cast_op
+    end
+
+    # Covert an integer wtype to a possibly smaller precision
+    # float type  (e.g. I32 to F32,I64 to F32, ...)
+    def cast_convert(wnode, wtype, signed)
+      if (wnode.template == :const)
+        # it's a WASM const, simply change the wtype
+        wnode.wtype = wtype
+        wn_cast_op = wnode
+      else
+        wn_cast_op = wnode.insert(:insn)
+        wn_cast_op.wtype = wtype
+        sign = signed ? 's' : 'u'
+        source_type = wnode.wasm_type
+        wasm_type = wn_cast_op.wasm_type
+        wn_cast_op.c(:convert , wasm_type: wasm_type, source_type: source_type, sign: sign)
       end
       wn_cast_op
     end
@@ -806,14 +875,21 @@ module Rlang::Parser
         self.cast(wna, leading_wtype).reparent_to(wnode_op)
       end
 
-      # Once operands casting is done, see if we need the signed or unsigned
-      # version of the native operator
+      # Once operands casting is done, see if we need the signed, unsigned
+      # or nosign (float) version of the native operator
       # NOTE : At this stage, after the operands casting both of them
       # should either be signed or unsigned, hence the XNOR sanity check
       # below
       if ALL_SIGNED_OPS_MAP.values.include? op
         if !((signed = wnode_recv.wtype.signed?) ^ (wnode_args.empty? ? true : wnode_args.first.wtype.signed?))
-          wnode_op.wargs[:operator] = SIGNED_OPS[signed ? :signed : :unsigned][op]
+          if wnode_recv.wtype.float?
+            op_category = :nosign
+          elsif signed
+            op_category = :signed
+          else
+            op_category = :unsigned
+          end
+          wnode_op.wargs[:operator] = SIGNED_OPS[op_category][op]
           logger.debug "Receiver has wtype #{wnode_recv.wtype} / Argument has wtype #{wnode_args.first.wtype}"
           logger.debug "Replacing #{op} operator with #{wnode_op.wargs[:operator]}"
           op = wnode_op.wargs[:operator]
@@ -985,9 +1061,11 @@ module Rlang::Parser
     # This is a post processing of the while
     # exp wnode because br_if requires to 
     # negate the original while condition
+    # Note the wasm type of a condition testing
+    # always returns an i32
     def while_cond(wnode, wnode_cond_exp)
       wn_eqz = WNode.new(:insn, wnode)
-      wn_eqz.c(:eqz, wasm_type: wnode_cond_exp.wasm_type)
+      wn_eqz.c(:eqz, wasm_type: 'i32')
       wnode_cond_exp.reparent_to(wn_eqz)
       wn_eqz
     end

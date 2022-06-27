@@ -87,6 +87,22 @@ class RlangTest < Minitest::Test
   def test_call_add_i64_func
     assert_equal 20, @instance.exports.send(@wfunc).call
   end
+
+  def test_call_add_f64_func
+    assert_equal 1105000.0, @instance.exports.send(@wfunc).call
+  end
+
+  def test_call_add_f32_func
+    assert_equal 1037500.0, @instance.exports.send(@wfunc).call
+  end
+
+  def test_compute_pi_f32
+    assert_equal '3.141597', '%.6f' % @instance.exports.send(@wfunc).call
+  end
+
+  def test_compute_pi_f64
+    assert_equal '3.14159265', '%.8f' %@instance.exports.send(@wfunc).call
+  end
   
   def test_call_class_method
     assert_equal 5200, @instance.exports.send(@wfunc).call(500)
@@ -149,6 +165,49 @@ class RlangTest < Minitest::Test
     assert_equal 5, @instance.exports.send(@wfunc).call
   end
 
+  def test_cast_i32_to_f32
+    # Should return -2147483612 but Wasmer runtime
+    # returns -2147483648
+    # TODO : see why wasmer does that
+    assert_equal -2147483648, @instance.exports.send(@wfunc).call
+  end
+  
+  def test_cast_i32_to_f64
+    assert_equal -2147483612, @instance.exports.send(@wfunc).call
+  end
+
+  def test_cast_f32_to_i64
+    # Should return 12345670000 but Wasmer runtime
+    # returns 123456700416
+    # TODO : see why wasmer does that
+    assert_equal 123456700416, @instance.exports.send(@wfunc).call
+  end
+
+  def test_cast_f32_to_i32
+    assert_equal -21474836, @instance.exports.send(@wfunc).call
+  end
+
+  def test_cast_f32_to_f64
+    assert_equal 123456700416.0, @instance.exports.send(@wfunc).call
+  end
+  
+  def test_cast_f64_to_i64
+    # Should return 12345670000 but Wasmer runtime
+    # returns 123456700416
+    # TODO : see why wasmer does that
+    assert_equal 1234567012345679, @instance.exports.send(@wfunc).call
+  end
+
+  def test_cast_f64_to_i32
+    assert_equal -21474836, @instance.exports.send(@wfunc).call
+  end
+
+  def test_cast_f64_to_f32
+    # Should return 123456790.0 but Wasmer runtime
+    # returns 123456792.0
+    # TODO : see why wasmer does that
+    assert_equal 123456792.0, @instance.exports.send(@wfunc).call
+  end
   def test_class_inheritance
     assert_equal 36, @instance.exports.send(@wfunc).call
   end
@@ -258,7 +317,17 @@ class RlangTest < Minitest::Test
   def test_global_var_init_i64
     assert_equal 400_000_000_000, @instance.exports.send(@wfunc).call
   end
-  
+    
+  def test_global_var_init_f32
+    # Compare the string representation to avoid
+    # rounding problems
+    assert_equal "3.14", '%.2f' % @instance.exports.send(@wfunc).call
+  end
+    
+  def test_global_var_init_f64
+    assert_equal 3.1234567891011e124, @instance.exports.send(@wfunc).call
+  end
+
   def test_global_var_init
     assert_equal 3050700, @instance.exports.send(@wfunc).call
   end

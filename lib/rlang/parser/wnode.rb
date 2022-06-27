@@ -40,9 +40,12 @@ module Rlang::Parser
       const: '%{wasm_type}.const %{value}',
       drop: 'drop',
       nop: 'nop',
-      extend_i32_u: '%{wasm_type}.extend_i32_u',
-      extend_i32_s: '%{wasm_type}.extend_i32_s',
-      wrap_i64: '%{wasm_type}.wrap_i64',
+      extend: '%{wasm_type}.extend_%{source_type}_%{sign}',
+      trunc: '%{wasm_type}.trunc_%{source_type}_%{sign}',
+      convert: '%{wasm_type}.convert_%{source_type}_%{sign}',
+      wrap: '%{wasm_type}.wrap_i64',
+      promote: '%{wasm_type}.promote_f32',
+      demote: '%{wasm_type}.demote_f64',
       eqz: '%{wasm_type}.eqz',
       if: 'if',
       then: 'then',
@@ -83,7 +86,7 @@ module Rlang::Parser
       # make this wnode a child of its parent
       @parent.add_child(self, prepend) if @parent
 
-      # WASM type of this node. If node is :method
+      # Wtype of this node. If node is :method
       # then it's the type of the return value (nil
       # means no value returned)
       @wtype = WType::DEFAULT

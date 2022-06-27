@@ -186,8 +186,7 @@ module Rlang::Parser
         wn = parse_int(node, wnode, keep_eval)
       
       when :float
-        rlse node, "float instructions not supported"
-        #parse_float(node, wnode, keep_eval)
+        wn = parse_float(node, wnode, keep_eval)
 
       when :nil
         rlse node, "nil not supported"
@@ -882,6 +881,17 @@ module Rlang::Parser
       return wn_int
     end
 
+    def parse_float(node, wnode, keep_eval)
+      value, = *node.children
+      logger.debug "float: #{value} for parent wnode #{wnode.head} keep_eval:#{keep_eval}"
+      wn_float = @wgenerator.float(wnode, WType::F32, value)
+      # Drop last evaluated result if asked to
+      @wgenerator.drop(wnode) unless keep_eval
+
+      logger.debug "wn_float:#{wn_float} wtype:#{wn_float.wtype} keep_eval:#{keep_eval}"
+      return wn_float
+    end
+  
     def parse_true(node, wnode, keep_eval)
       wn_true = @wgenerator.int(wnode, WType::DEFAULT, 1)
       # Drop last evaluated result if asked to
@@ -1313,13 +1323,13 @@ module Rlang::Parser
       # Used at compile time
       #
       # Example
-      # (recv).to_xxxx where xxxx can be [U]I[32|64]
+      # (recv).to_xxxx where xxxx can be [U][I|F][32|64]
       # -----
       # s(:send,
       #    s(expression),
       #    :to_I64)
       #
-      if [:to_UI64, :to_I64, :to_UI32, :to_I32].include? method_name
+      if [:to_F64, :to_F32, :to_UI64, :to_I64, :to_UI32, :to_I32].include? method_name
         if (cnt = node.children.count) > 2
           rlse node, "cast directive should have no argument (got #{cnt - 2})"
         end
