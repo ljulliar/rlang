@@ -1,14 +1,10 @@
-# Rubinius WebAssembly VM
-# Copyright (c) 2019, Laurent Julliard and contributors
+# Rlang language, compiler and libraries
+# Copyright (c) 2019-2022,Laurent Julliard and contributors
 # All rights reserved.
-
+#
 # Rlang parser
 # Rlang is a subset of the Ruby language that can be transpiled
-# to WAT and then compiled to WASM. The Rubinius WASM virtual
-# machine is written in Rlang.
-
-# TODO: write a short documentation about what subset of Ruby is
-# supported in Rlang
+# to WebAssembly.
 
 require 'parser/current'
 require 'pathname'

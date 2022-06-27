@@ -1,6 +1,6 @@
 
-# Rubinius WebAssembly VM
-# Copyright (c) 2019, Laurent Julliard and contributors
+# Rlang language, compiler and libraries
+# Copyright (c) 2019-2022,Laurent Julliard and contributors
 # All rights reserved.
 #
 # mimic the sbrk Unix function, requesting n more bytes

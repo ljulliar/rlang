@@ -1,5 +1,5 @@
-# Rubinius WebAssembly VM
-# Copyright (c) 2019-2020, Laurent Julliard and contributors
+# Rlang language, compiler and libraries
+# Copyright (c) 2019-2022, Laurent Julliard and contributors
 # All rights reserved.
 #
 # IO class for all basic input and output operations

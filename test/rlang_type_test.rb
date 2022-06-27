@@ -1,5 +1,5 @@
 # Rlang Webassembly compiler
-# Copyright (c) 2019-2020, Laurent Julliard and contributors
+# Copyright (c) 2019-2022, Laurent Julliard and contributors
 # All rights reserved.
 
 require 'test_helper'
