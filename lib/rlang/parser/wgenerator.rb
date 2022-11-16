@@ -368,10 +368,10 @@ module Rlang::Parser
     end
 
     def def_method(wnode, method_name, method_type)
-      logger.debug("Defining #{method_type} method #{method_name}...")
       if (method = wnode.find_method(nil, method_name, method_type, true))
         logger.warn "Redefining #{method.klass.name},#{method_name}" if method.wnode
       else
+        logger.debug("Creating #{method_type} method #{method_name}...")
         method = wnode.create_method(nil, method_name, method_type, nil, true)
       end
 
@@ -379,6 +379,7 @@ module Rlang::Parser
       # specified on command line
       if method.klass.path_name == :Object && method.name == :main
         method.export_name = @parser.config[:start]
+        logger.debug("Giving Object#main method the export name #{method.export_name}...")
       end
 
       # Generate method definition wnode
