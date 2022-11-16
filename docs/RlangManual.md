@@ -291,7 +291,7 @@ The first 2 arguments of import are the imported module name and function name a
 1. The Rlang method name doesn't have to be the same as the function name in the import statement.
 2. As imported function are external to your Rlang module they must be declared as class methods. This is bacause defining them as instance method would automatically pass `self` as the first argument in the method call therefore changing the signature of the method.
 
-The example above is taken from the Rlang WASI class that defines the interface with [WASI (WebAssembly System Interface)](https::wasi.dev).
+The example above is taken from the Rlang WASI class that defines the interface with [WASI (WebAssembly System Interface)](https://wasi.dev).
 
 
 ## Rlang types
