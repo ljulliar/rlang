@@ -1120,7 +1120,7 @@ module Rlang::Parser
       return wn_method
     end
 
-    def parse_require(wnode, file)
+    def parse_require(node, wnode, file)
       logger.debug "File required: #{file}"
       extensions = ['', '.wat', '.rb']
       full_path_file = nil
@@ -1163,7 +1163,7 @@ module Rlang::Parser
           end
         end
       end
-      rlse node, LoadError, "no such file to load: #{file}" unless full_path_file
+      rlse node, "no such file to load: #{file}" unless full_path_file
 
       # Now load the file 
       if File.extname(full_path_file) == '.wat'
@@ -1174,10 +1174,10 @@ module Rlang::Parser
       end
     end
 
-    def parse_require_relative(wnode, file)
+    def parse_require_relative(node, wnode, file)
       logger.debug "Require file: #{file}...\n   ...relative to #{self.config[:__FILE__]}"
       full_path_file = File.expand_path(file, File.dirname(self.config[:__FILE__]))
-      parse_require(wnode, full_path_file)
+      parse_require(node, wnode, full_path_file)
     end
 
     # Parse the many differents forms of send
@@ -1465,7 +1465,7 @@ module Rlang::Parser
       file_node = node.children.last
       rlse node, "require only accepts a string argument (got #{file_node})" \
         unless file_node.type == :str
-      parse_require(wnode, file_node.children.last)
+      parse_require(node, wnode, file_node.children.last)
       return
     end
 
@@ -1480,7 +1480,7 @@ module Rlang::Parser
       file_node = node.children.last
       rlse node, "require only accepts a string argument (got #{file_node})" \
         unless file_node.type == :str
-      parse_require_relative(wnode, file_node.children.last)
+      parse_require_relative(node, wnode, file_node.children.last)
       return
     end
 
