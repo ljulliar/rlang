@@ -34,7 +34,7 @@ Usage: rlang [options] rlang_file.rb
 * **-a, --ast**: parse Rlang file and generate the Ruby abstract syntax tree
 * **-s, --wasm**: parse Rlang file, generate WAT source code and compile it to WASM bytecode
 * **-c, --comments**: include the Rlang comments at the corresponding location in the generated WAT source file.
-* **-S, --start**: function to use as the execution starting point of the WASM module (default is `_start`)
+* **-S, --start**: export name to give to the `main` function which is used as the execution starting point of the WASM module (default is `_start`)
 * **-o, --output FILE**: send rlang output to FILE
 * **-v, --verbose [LEVEL]**: verbosity level (fatal, error, warn, info, debug). Default is warn
 * **-V, --version**: Displays Rlang version
