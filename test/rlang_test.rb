@@ -101,7 +101,7 @@ class RlangTest < Minitest::Test
   end
 
   def test_compute_pi_f64
-    assert_equal '3.14159265', '%.8f' %@instance.exports.send(@wfunc).call
+    assert_equal '3.14159265', '%.8f' % @instance.exports.send(@wfunc).call
   end
   
   def test_call_class_method
