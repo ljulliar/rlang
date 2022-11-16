@@ -101,7 +101,9 @@ module Rlang::Parser
     end
 
     def export!(export_name=nil)
-      @export_name = export_name
+      # override export name only if not nil value passed as a
+      # parameter. Otherwise the export name as it is.
+      @export_name = export_name if export_name
       Export.new(self)
     end
 
